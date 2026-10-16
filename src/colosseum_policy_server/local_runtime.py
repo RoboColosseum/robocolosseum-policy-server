@@ -197,6 +197,7 @@ class LocalPolicyRuntime:
                     end = getattr(self.backend, "end_session", None)
                     if end is not None:
                         await end()
+                    await self.supervisor.stop()
         except Exception: print(traceback.format_exc(), flush=True); await self._error(ws, run_id, "INVALID_REQUEST", "Invalid local policy request")
     async def _serve(self, ws, run_id: str, model: LocalModel) -> None:
         sequence = 1
