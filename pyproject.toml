@@ -20,8 +20,8 @@ dev = ["grpcio-tools>=1.66", "pytest>=8", "pytest-asyncio>=0.24"]
 demo = ["opencv-python>=4.10,<5"]
 droid = ["msgpack>=1,<2", "pyzmq>=25,<28", "scipy>=1.10,<2"]
 agent = [
-  "inspect-robots @ git+https://github.com/robocurve/inspect-robots.git@d08442a9d1f43af4658c8d71e02d461e780286e1",
-  "inspect-robots-agent @ git+https://github.com/robocurve/inspect-robots.git@d08442a9d1f43af4658c8d71e02d461e780286e1#subdirectory=plugins/inspect-robots-agent",
+  "inspect-robots @ git+https://github.com/supernoooo/inspect-robots.git@0865dcac2f38dfdd0a4768a68bf4146ef394b69f",
+  "inspect-robots-agent @ git+https://github.com/supernoooo/inspect-robots.git@0865dcac2f38dfdd0a4768a68bf4146ef394b69f#subdirectory=plugins/inspect-robots-agent",
 ]
 
 [project.entry-points."colosseum_policy_server.backends"]

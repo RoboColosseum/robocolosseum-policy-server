@@ -1,7 +1,7 @@
 """Stateful Inspect Robots LLM policy behind Colosseum's Local Protocol.
 
-No robot driver is loaded here. The Client executes Franka or bimanual YAM joint
-positions. Optional Inspect dependencies are imported only on session startup.
+No robot driver is loaded here. The Client executes Franka commands or bimanual
+YAM joint/EE commands. Optional Inspect dependencies load on session startup.
 """
 from __future__ import annotations
 
@@ -20,6 +20,15 @@ from .base import LocalModel
 from ..model_adapters.bounds import check_bounds
 from ..model_adapters.observation import _rgb, _state
 from ..model_adapters.robots import session_robot, llm_robot_contract
+
+
+OFFICIAL_LLM_URLS = {
+    'openai': 'https://api.openai.com/v1',
+    'x-ai': 'https://api.x.ai/v1',
+    'anthropic': 'https://api.anthropic.com/v1',
+}
+YAM_EEF_LABELS = tuple(f'{side}_{axis}' for side in ('left', 'right')
+                       for axis in ('x', 'y', 'z', 'yaw', 'pitch', 'roll', 'gripper'))
 
 
 def create_backend(options: Mapping[str, Any]) -> "InspectAgentBackend":
@@ -49,6 +58,7 @@ class InspectAgentBackend:
         settings = {**self.options, **model.backend_options}
         self.robot = llm_robot_contract(session_robot(model, request, self.options))
         self.robot.validate(model)
+        self.eef_mode = self.robot.name == 'yam' and settings.get('control_mode') == 'eef_abs_pose'
         self.joint_count = self.robot.joint_count
         self.joint_indices = list(self.robot.joint_indices)
         self.gripper_indices = list(self.robot.gripper_indices)
@@ -83,8 +93,12 @@ class InspectAgentBackend:
         self.sensors = tuple(settings.get("sensors", default_sensors))
         if self.robot.name == 'yam' and set(self.sensors) != set(default_sensors):
             raise ValueError('YAM requires head_image, left_image and right_image')
-        self.action_low = self.robot.pack(self.low, np.zeros(self.gripper_count))
-        self.action_high = self.robot.pack(self.high, np.ones(self.gripper_count))
+        self.joint_low = self.robot.pack(self.low, np.zeros(self.gripper_count))
+        self.joint_high = self.robot.pack(self.high, np.ones(self.gripper_count))
+        self.action_low = (self._vector(settings, 'eef_low', 14) if self.eef_mode else self.joint_low)
+        self.action_high = (self._vector(settings, 'eef_high', 14) if self.eef_mode else self.joint_high)
+        if np.any(self.action_low > self.action_high):
+            raise ValueError('EEF workspace requires eef_low <= eef_high')
         self.action_max_step = self.robot.pack(self.max_step, np.ones(self.gripper_count))
         if not self.sensors or any(not isinstance(s, str) or not s for s in self.sensors) or len(set(self.sensors)) != len(self.sensors):
             raise ValueError("sensors must be nonempty unique sensor names")
@@ -105,18 +119,32 @@ class InspectAgentBackend:
         # by Inspect, never carried in the public model contract or config logs.
         kwargs = {key: settings[key] for key in (
             "effort", "max_llm_calls", "max_output_tokens", "max_speed_frac",
-            "images", "image_horizon", "max_retries", "backoff_s",
+            "images", "image_horizon",
         ) if key in settings}
         kwargs.setdefault("effort", "low")
         kwargs.setdefault("max_llm_calls", 30)
-        kwargs.setdefault("max_retries", 1)
-        if typed:
+        auth_method = request.get("auth_method", "api-key")
+        if auth_method not in {"api-key", "claude-code"}:
+            raise ValueError("Unsupported LLM authentication method")
+        endpoint = settings.get("llm_endpoint", "router")
+        if endpoint not in {"router", "official"}:
+            raise ValueError("llm_endpoint must be router or official")
+        if auth_method == "claude-code":
+            if not typed or provider != "anthropic" or request.get("api_key"):
+                raise ValueError("Claude Code login is only valid for Claude without an API key")
+            kwargs.update(
+                claude_command=settings.get("claude_command"),
+                claude_timeout_s=settings.get("claude_timeout_s", 120),
+            )
+        elif typed:
             api_key = request.get("api_key")
             if not isinstance(api_key, str) or not api_key.strip():
                 raise ValueError("Client must supply its API key for this LLM")
             # Per-agent credential environment; never mutate process env or
             # fall back to another Client's / the host's provider credentials.
-            base_url = model.url.rstrip("/")
+            # official: the Router URL stays the model identity only, so
+            # official keys are never sent to a relay URL in that descriptor.
+            base_url = OFFICIAL_LLM_URLS[provider] if endpoint == "official" else model.url.rstrip("/")
             # Inspect appends /messages; Anthropic URLs may be supplied at root.
             if provider == "anthropic" and not urlsplit(base_url).path.strip("/"):
                 base_url += "/v1"
@@ -128,9 +156,10 @@ class InspectAgentBackend:
                 from .llm_transport import BearerTransport
                 kwargs["transport"] = BearerTransport(api_key)
         try:
+            wire = "claude-code" if auth_method == "claude-code" else settings.get("api_format", wires[identity.netloc])
             self.agent = factory(model=model.name if typed else f"{identity.netloc}/{identity.path.lstrip('/')}",
-                                 wire=settings.get("api_format", wires[identity.netloc]), wire_capture=False, **kwargs)
-            if typed and urlsplit(model.url).hostname != "api.openai.com":
+                                 wire=wire, wire_capture=False, **kwargs)
+            if typed and auth_method != "claude-code" and urlsplit(kwargs["base_url"]).hostname != "api.openai.com":
                 # Pinned Inspect enables explicit GPT cache breakpoints by model
                 # name alone. Relays may reject them; keep stateless full history.
                 client = getattr(self.agent, "_client", None)
@@ -173,10 +202,14 @@ class InspectAgentBackend:
             raise ValueError("instruction must be nonempty and control_step must advance")
         joints = _state(observation, self.robot.state_key, (self.joint_count,)).astype(np.float64)
         gripper = _state(observation, "gripper_position", (self.gripper_count,)).astype(np.float64)
-        check_bounds(self.robot.pack(joints, gripper), self.action_low, self.action_high,
+        check_bounds(self.robot.pack(joints, gripper), self.joint_low, self.joint_high,
                      self.robot.labels, "observed state is outside the configured rig bounds")
+        eef_state = (_state(observation, 'cartesian_position', (14,)).astype(np.float64)
+                     if self.eef_mode else None)
+        # FK feedback can drift slightly beyond the command workspace after a
+        # bounded IK step; validate its shape/finiteness but guard commands.
         if self.hold_target is not None:
-            return self._hold(joints, observation.control_step)
+            return self._hold(eef_state if self.eef_mode else joints, observation.control_step)
         raw = {item.sensor_id: item for item in observation.sensors}
         images = {name: _rgb(raw.get(name), name) for name in self.sensors}
         # Inspect uses 1=open. RobotEnv's polarity is explicitly configured.
@@ -186,17 +219,25 @@ class InspectAgentBackend:
             self.agent.bind(EmbodimentInfo(
                 name=self.robot.name, control_hz=self.model.control_hz,
                 action_space=Box(shape=(self.robot.action_dim,), low=self.action_low, high=self.action_high,
-                    semantics=ActionSemantics(control_mode="joint_pos", gripper="binary" if self.robot.binary_gripper else "continuous",
-                        dim_labels=self.robot.labels,
-                        max_step=tuple(self.action_max_step))),
+                    semantics=ActionSemantics(
+                        control_mode='eef_abs_pose' if self.eef_mode else 'joint_pos',
+                        **({'frame': 'base'} if self.eef_mode else {}),
+                        gripper="binary" if self.robot.binary_gripper else "continuous",
+                        dim_labels=YAM_EEF_LABELS if self.eef_mode else self.robot.labels,
+                        max_step=None if self.eef_mode else tuple(self.action_max_step))),
                 observation_space=ObservationSpace(cameras=cameras,
-                    state=StateSpec((StateField("joint_pos", (self.robot.action_dim,), "rad+normalized"),))),
-                docs=self.docs + f"\nAction order: {', '.join(self.robot.labels)}. Grippers: 0 closed, 1 open. "
-                    "Motion may be truncated to max_horizon; use the next measured state to replan.",
+                    state=StateSpec((StateField("joint_pos", (self.robot.action_dim,), "rad+normalized"),
+                        *((StateField('eef_state', (14,), 'm+rad+normalized'),) if self.eef_mode else ())))),
+                docs=self.docs + f"\nAction order: {', '.join(YAM_EEF_LABELS if self.eef_mode else self.robot.labels)}. Grippers: 0 closed, 1 open. "
+                    "Motion may be truncated to max_horizon; use the next measured state to replan."
+                    + (" Each arm's EE x/y/z is metres in its own base frame; yaw/pitch/roll "
+                       "are radians relative to reset orientation. Verify eef_state after moving."
+                       if self.eef_mode else ""),
             ))
             self.agent.reset(Scene(id=self.run_id, instruction=observation.instruction))
             self.bound = True
-        obs = Observation(images=images, state={"joint_pos": position},
+        obs = Observation(images=images, state={"joint_pos": position,
+                          **({'eef_state': eef_state} if self.eef_mode else {})},
                           instruction=observation.instruction, extra={"env_step": observation.control_step})
         chunk = self.agent.act(obs)
         if chunk.meta.get("request_stop") or any(action.meta.get("request_stop") for action in chunk.actions):
@@ -213,18 +254,20 @@ class InspectAgentBackend:
             if self.last_actions is not None:
                 executed = min(observation.control_step - self.last_step, len(self.last_actions))
                 grip = self.last_actions[executed - 1, self.gripper_indices].copy()
-            self.hold_target = self.robot.pack(joints, grip).astype(np.float32)
-            return self._hold(joints, observation.control_step)
+            self.hold_target = (eef_state.copy() if self.eef_mode else self.robot.pack(joints, grip)).astype(np.float32)
+            self.hold_target[self.gripper_indices] = grip
+            return self._hold(eef_state if self.eef_mode else joints, observation.control_step)
         if chunk.control_hz is not None and chunk.control_hz != self.model.control_hz:
             raise ValueError("agent returned a different control frequency")
         actions = np.asarray([action.data for action in chunk.actions], dtype=np.float64)
         if actions.ndim != 2 or actions.shape[1] != self.robot.action_dim or not len(actions) or not np.isfinite(actions).all():
             raise ValueError("agent returned malformed actions")
-        check_bounds(actions, self.action_low, self.action_high, self.robot.labels,
+        check_bounds(actions, self.action_low, self.action_high,
+                     YAM_EEF_LABELS if self.eef_mode else self.robot.labels,
                      "agent actions exceed rig bounds")
-        previous = np.vstack((position, actions[:-1]))
-        delta = actions[:, self.joint_indices] - previous[:, self.joint_indices]
-        exceeded = np.abs(delta) > self.max_step + 1e-7
+        previous = np.vstack((position, actions[:-1])) if not self.eef_mode else None
+        delta = actions[:, self.joint_indices] - previous[:, self.joint_indices] if previous is not None else None
+        exceeded = np.abs(delta) > self.max_step + 1e-7 if delta is not None else np.empty((0, 0), dtype=bool)
         if np.any(exceeded):
             details = '; '.join(
                 f'action_index={row} {self.robot.labels[self.joint_indices[j]]}: '

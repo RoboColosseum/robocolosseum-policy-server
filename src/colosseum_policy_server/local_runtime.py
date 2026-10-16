@@ -145,6 +145,15 @@ class LocalPolicyRuntime:
             if request.get("type") == "capabilities":
                 await ws.send(encode_control({"type":"capabilities", "protocol_version":1, "verification_only":bool(getattr(self.backend, "verification_only", False))})); return
             if request.get("type") != "prepare" or not isinstance(request.get("run_id"), str) or not isinstance(request.get("model"), Mapping): raise ValueError("invalid preparation")
+            try:
+                local_options = json.loads(request.get('message') or '{}').get('client_options', {})
+            except (ValueError, TypeError, AttributeError):
+                local_options = {}
+            if not isinstance(local_options, dict):
+                raise ValueError('invalid local Client options')
+            request = {**request, **{key: local_options[key]
+                                   for key in ('auth_method', 'use_local_action_contract')
+                                   if key in local_options}}
             run_id = request["run_id"]
             # Legacy profiles are opaque metadata; subfolder selection is deferred.
             requested_model = {key: value for key, value in request["model"].items() if key not in {"subfolder", "runtime_profile"}}
@@ -154,6 +163,9 @@ class LocalPolicyRuntime:
             matches = [model for model in self.config.models.values() if model.public_spec() == requested_model]
             if len(matches) != 1: raise ValueError("unregistered model")
             model = matches[0]
+            local_eef = model.model_type == 'llm' and model.backend_options.get('control_mode') == 'eef_abs_pose'
+            if local_eef and request.get('use_local_action_contract') is not True:
+                raise ValueError('EEF local action override requires Client use_local_action_contract: true')
             verification_only = bool(getattr(self.backend, "verification_only", False))
             if verification_only and request.get("test") is not True:
                 raise ValueError("Loopback backend requires test: true")
@@ -172,7 +184,13 @@ class LocalPolicyRuntime:
                         print(traceback.format_exc(), flush=True)
                         await self._error(ws, run_id, "MODEL_START_FAILED", "Model startup failed")
                         return
-                    await ws.send(encode_control({"type":"ready", "run_id":run_id, "preparation_id":request.get("preparation_id", ""), "model":dict(request["model"]), "loaded":not verification_only, "verification_only":verification_only}))
+                    ready = {"type":"ready", "run_id":run_id, "preparation_id":request.get("preparation_id", ""),
+                             "model":dict(request["model"]), "loaded":not verification_only,
+                             "verification_only":verification_only}
+                    if local_eef:
+                        ready['message'] = json.dumps({'effective_model': {
+                            **dict(request['model']), 'action_space': 'eef_abs_pose'}})
+                    await ws.send(encode_control(ready))
                     self._progress('model_ready', run_id, model)
                     await self._serve(ws, run_id, model)
                 finally:
