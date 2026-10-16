@@ -68,7 +68,10 @@ class LingBotYAMRuntime:
                                      'observation.images.right')))
 
     def __init__(self, checkpoint, *, source_root, processor, device='cuda', dtype='bfloat16',
-                 use_compile=False):
+                 use_compile=False, return_steps=30):
+        if not 1 <= return_steps <= 30:
+            raise ValueError('LingBot return_steps must be in [1, 30]')
+        self.return_steps = return_steps
         checkpoint, source_root, processor = (Path(p).resolve() for p in (checkpoint, source_root, processor))
         robot, stats = validate_assets(checkpoint, source_root, processor)
         if device != 'cuda':
@@ -127,4 +130,5 @@ class LingBotYAMRuntime:
             actions[:, [6, 13]] = np.clip(grippers, 0, 1)
         check_bounds(actions[:, [6, 13]], 0, 1, ('left_gripper', 'right_gripper'),
                      'LingBot YAM action grippers outside [0, 1]')
-        return {'actions': actions}
+        # Predict the full trained 30-step chunk; optionally execute only a prefix.
+        return {'actions': actions[:self.return_steps]}
