@@ -47,11 +47,15 @@ def parse_args(argv=None):
                         help="G05 SO101 steps served per inference; match the registered max_horizon")
     parser.add_argument("--g05-override", action="append", default=[], metavar="KEY=VALUE",
                         help="extra upstream G05 Hydra override for SO101 (repeatable)")
+    parser.add_argument("--lingbot-return-steps", type=int, default=30,
+                        help="return only the first N of LingBot's 30 predicted actions")
     args = parser.parse_args(argv)
     if args.model == "lingbot_v2" and args.robot_type != "yam":
         parser.error("lingbot_v2 currently supports --robot-type yam only")
     if args.lingbot_compile and args.model != "lingbot_v2":
         parser.error("--lingbot-compile requires lingbot_v2")
+    if not 1 <= args.lingbot_return_steps <= 30:
+        parser.error("--lingbot-return-steps must be in [1, 30]")
     if args.groot_camera_order != "checkpoint" and (args.model != "groot_n17" or args.robot_type != "yam"):
         parser.error("--groot-camera-order top-left-right requires groot_n17 --robot-type yam")
     if not 1 <= args.port <= 65535 or not 1 <= args.num_steps <= 10:
@@ -249,7 +253,8 @@ def main(argv=None):
         from .yam_lingbot import LingBotYAMRuntime
         runtime = LingBotYAMRuntime(args.checkpoint, source_root=args.source_root,
                                     processor=args.processor, device=args.device, dtype=args.dtype,
-                                    use_compile=args.lingbot_compile)
+                                    use_compile=args.lingbot_compile,
+                                    return_steps=args.lingbot_return_steps)
         with HTTPServer((args.host, args.port), http_handler(runtime)) as server:
             server.serve_forever()
     elif args.model == "pi05_lerobot":

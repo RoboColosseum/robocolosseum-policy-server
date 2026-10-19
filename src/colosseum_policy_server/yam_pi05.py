@@ -1,8 +1,11 @@
 """Local LeRobot pi05-MolmoAct2-YAM worker, using saved quantile processors."""
 import json
+import logging
 from pathlib import Path
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 
 class Pi05YAMRuntime:
@@ -91,6 +94,10 @@ class Pi05YAMRuntime:
         actions = actions.detach().cpu().float().numpy()
         if actions.shape != (1, 30, 14) or not np.isfinite(actions).all():
             raise ValueError('pi05 YAM must return a finite 1 x 30 x 14 action tensor')
-        if np.any(actions[:, :, [6, 13]] < 0) or np.any(actions[:, :, [6, 13]] > 1):
-            raise ValueError('pi05 returned grippers outside [0, 1]')
+        # Only saturate finite gripper targets (same as G05/LingBot); arm joints are unchanged.
+        grippers = actions[:, :, [6, 13]]
+        if np.any(grippers < 0) or np.any(grippers > 1):
+            log.warning('pi05 clipped grippers to [0, 1]: count=%d raw_min=%.6f raw_max=%.6f',
+                        int(((grippers < 0) | (grippers > 1)).sum()), float(grippers.min()), float(grippers.max()))
+            actions[:, :, [6, 13]] = np.clip(grippers, 0, 1)
         return {'actions': actions[0]}
