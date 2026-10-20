@@ -197,6 +197,41 @@ After matching, `sdk.robot` exposes the Client's hardware specification and
 action dimensions, horizon, finite values, and observation deadlines before
 sending actions.
 
+### Navigation policies (Earth Rover Mini+)
+
+The Earth Rover Mini+ (`robot_type: earth_rover_mini_plus`) is a mobile base
+with no joints: its action space is `base_velocity`, two normalized values
+`[linear, angular]` in `[-1, 1]` (`+angular` turns left) at 10 Hz. Declare it
+in `configs/policy.yaml`:
+
+```yaml
+url: wss://YOUR_ROUTER
+token: REPLACE_WITH_POLICY_TOKEN
+action_spaces: [base_velocity]
+control_hz: 10
+max_horizon: 10
+```
+
+Each observation carries:
+
+```python
+obs.image("front_image")               # Always present; obs.image("rear_image") when the rover publishes it.
+obs.raw_state["navigation_state"]      # float64 [latitude, longitude, heading_deg, speed, battery, rpm_1..rpm_4]
+obs.raw_state.get("goal_gps")          # [latitude, longitude] of the destination; GPS goals only
+obs.image("goal_image")                # The reference photo; photo goals only (no GPS is sent)
+```
+
+When the policy has reached the goal, send a zero chunk with `done=True`; the
+Client confirms the stop and ends the trial:
+
+```python
+sdk.send_action(np.zeros((1, 2)), observation=obs, done=True)
+```
+
+The Client stops the rover on its own if no new chunk arrives within its
+command TTL (1 s by default), so keep chunks at least a few steps long.
+`examples/rover_policy.py` is a minimal working policy.
+
 ### Start the Policy Server
 
 After implementing your model loader and inference adapter, run:

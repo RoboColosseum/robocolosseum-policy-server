@@ -134,6 +134,7 @@ class ColosseumPolicySDK:
         start_step: int | None = None,
         valid_until_step: int | None = None,
         control_hz: int | None = None,
+        done: bool = False,
     ) -> None:
         self._run(
             self._async_sdk.send_action(
@@ -143,6 +144,7 @@ class ColosseumPolicySDK:
                 start_step=start_step,
                 valid_until_step=valid_until_step,
                 control_hz=control_hz,
+                done=done,
             )
         )
 

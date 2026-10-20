@@ -151,3 +151,32 @@ async def test_send_action_rejects_invalid_chunks(sdk):
         await sdk.send_action(np.zeros((9, 8)), observation=observation)
     with pytest.raises(ValueError, match="finite"):
         await sdk.send_action(np.full((2, 8), np.nan), observation=observation)
+
+
+@pytest.mark.asyncio
+async def test_send_action_done_requires_zero_motion_and_serializes(sdk):
+    robot = pb.RobotSpec(
+        robot_type="earth_rover_mini_plus",
+        joint_count=0,
+        has_gripper=False,
+        control_hz=10,
+        action_spaces=[pb.ActionSpaceSpec(name="base_velocity", action_dim=2)],
+    )
+    match = pb.MatchResult(session_id="session-1", policy_server_id="gpu-01", policy_id="rover", robot=robot)
+    sdk.action_spaces = ("base_velocity",)
+    await sdk._handle_frame(relay_frame(pb.MATCHED, match, session_id="session-1"))
+    message = pb.Observation(control_step=3)
+    message.state["navigation_state"].CopyFrom(tensor_from_numpy(np.arange(9, dtype=np.float64)))
+    await sdk._handle_frame(relay_frame(pb.OBSERVATION, message, session_id="session-1", sequence=1))
+    observation = await sdk.get_obs(timeout=0.1)
+    assert sdk.selected_action_space == "base_velocity" and sdk.robot.joint_count == 0
+    assert observation.raw_state["navigation_state"].dtype == np.float64
+
+    with pytest.raises(ValueError, match="all-zero"):
+        await sdk.send_action(np.array([[0.3, 0.0]]), observation=observation, done=True)
+    with pytest.raises(ValueError, match="boolean"):
+        await sdk.send_action(np.zeros((1, 2)), observation=observation, done="yes")
+    await sdk.send_action(np.zeros((2, 2)), observation=observation, done=True)
+    plan = pb.ActionPlan.FromString(pb.RelayFrame.FromString(sdk.connection.sent[-1]).payload)
+    assert plan.done is True and plan.start_step == 3
+    assert pb.ActionPlan().done is False

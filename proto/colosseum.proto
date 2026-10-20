@@ -122,6 +122,8 @@ message ActionPlan {
   uint64 valid_until_step = 4;
   uint32 control_hz = 5;
   Tensor actions = 6;
+  // The policy declares the task complete; actions must be zeros and the Client ends the trial.
+  bool done = 7;
 }
 
 message ResetRequest {

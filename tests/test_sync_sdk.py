@@ -27,6 +27,7 @@ class FakeAsyncSDK:
 
     async def send_action(self, actions, **kwargs) -> None:
         self.actions = np.asarray(actions)
+        self.done = kwargs.get("done")
 
     async def close(self) -> None:
         self.closed = True
@@ -42,5 +43,8 @@ def test_sync_sdk_runs_async_transport_on_background_loop():
         assert sdk.get_obs() == "latest-observation"
         sdk.send_action(np.ones((2, 8), dtype=np.float32))
         np.testing.assert_array_equal(transport.actions, np.ones((2, 8), dtype=np.float32))
+        assert transport.done is False
+        sdk.send_action(np.zeros((1, 2)), done=True)
+        assert transport.done is True
 
     assert transport.closed
