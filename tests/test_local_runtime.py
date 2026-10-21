@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from colosseum_policy_server import colosseum_pb2 as pb
-from colosseum_policy_server.local_protocol import encode_control
+from colosseum_policy_server.local_protocol import encode_control, decode_control
 from colosseum_policy_server.local_runtime import LocalModel, LocalPolicyRuntime, RuntimeConfig, load_backend
 
 
@@ -37,6 +37,29 @@ class Backend:
         if self.delay: await asyncio.sleep(self.delay)
         if self.error: raise self.error
         return self.result
+
+
+async def test_eef_local_contract_preserves_router_model_and_run_id(tmp_path):
+    item = LocalModel.from_mapping({
+        'name': 'gpt-6-astra', 'model_type': 'llm',
+        'url': 'https://relay.example/v1', 'revision': 'router-revision',
+        'action_space': 'joint_position', 'action_dim': 14, 'control_hz': 30,
+        'max_horizon': 1, 'endpoint': 'inprocess://inspect-agent',
+        'backend_options': {'control_mode': 'eef_abs_pose'},
+    })
+    cfg = RuntimeConfig('127.0.0.1', 8000, 'unused', {}, tmp_path, 1, {item.name: item})
+    close = pb.RelayFrame(type=pb.SESSION_CLOSE, session_id='router-run').SerializeToString()
+    request = {'type': 'prepare', 'run_id': 'router-run', 'preparation_id': 'prep',
+               'model': item.public_spec(),
+               'message': json.dumps({'client_options': {'use_local_action_contract': True}})}
+    ws = Socket([encode_control(request), close])
+    await LocalPolicyRuntime(cfg, Backend()).handle(ws)
+    ready = decode_control(ws.sent[0])
+    assert ready['run_id'] == 'router-run'
+    assert ready['model'] == item.public_spec()
+    effective = json.loads(ready['message'])['effective_model']
+    assert effective['action_space'] == 'eef_abs_pose'
+    assert effective['url'] == item.url
 
 
 class FailingSupervisor:

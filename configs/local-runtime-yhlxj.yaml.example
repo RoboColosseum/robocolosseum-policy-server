@@ -17,7 +17,6 @@ backend:
     sensors: [head_image, left_image]
     effort: low
     max_llm_calls: 30
-    max_retries: 1
     max_speed_frac: 0.1
     log_dir: agent-logs
 models:

@@ -89,6 +89,11 @@ def test_bad_actions_rejected(runtime, bad):
     elif bad == 'nan': actions[0, 0, 0] = np.nan
     else: actions[0, 3, 6] = -0.1
     worker.post = lambda value: Tensor(actions)
+    if bad == 'gripper':  # saturated, not rejected; arm joints untouched
+        actions[0, 3, 5] = 2.5
+        result = worker.infer(payload())['actions']
+        assert result[3, 6] == 0 and result[3, 5] == 2.5
+        return
     with pytest.raises(ValueError): worker.infer(payload())
 
 

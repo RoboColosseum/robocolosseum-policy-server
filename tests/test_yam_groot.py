@@ -86,6 +86,9 @@ def test_reject_invalid_model_output(runtime, bad):
     elif bad=='nan': values[0,0,0]=np.nan
     else: values[0,0,13]=2
     worker.post=lambda _:Tensor(values)
+    if bad=='gripper':  # saturated, not rejected
+        assert worker.infer(payload())['actions'][0,13]==1
+        return
     with pytest.raises(ValueError):worker.infer(payload())
 
 

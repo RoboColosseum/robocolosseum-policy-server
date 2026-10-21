@@ -47,6 +47,11 @@ and [runtime configuration](configs/local-runtime-yam-g05.yaml.example).
 For LingBot-VLA v2 YAM, see the [worker setup](docs/lingbot-yam.md) and
 [launcher configuration](configs/local-runtime-yam-lingbot.yaml.example).
 
+To record and review YAM A/B evaluations with all five VLAs on this GPU and
+the three LLMs under Inspect EE control, follow the Client's
+[local evaluation guide](https://github.com/frodobots-org/colosseum-client/blob/main/docs/local-evals.md)
+with [this configuration](configs/local-runtime-yam-local.yaml.example).
+
 For the SO-ARM101 generalist checkpoints, follow the [SO101 setup guide](docs/so101.md)
 and use [the SO101 runtime example](configs/local-runtime-so101.yaml.example).
 
@@ -223,6 +228,9 @@ Keys still come from the Client, per trial; no keys belong in this config or
 Router. Optional per-model `backend_options.api_format` accepts Inspect wire
 names `responses`, `chat`, or `messages`. Anthropic defaults to `x-api-key`;
 set `backend_options.api_auth: bearer` for a relay requiring Bearer tokens.
+Set `backend_options.llm_endpoint: official` to keep the Router `url` as the
+model identity only and send official Client keys to the OpenAI, xAI or
+Anthropic API instead.
 See `configs/local-runtime-yhlxj.yaml.example`. Copy your existing measured
 robot limits, gripper polarity, camera names, and notes; example null limits
 intentionally prevent execution until configured.

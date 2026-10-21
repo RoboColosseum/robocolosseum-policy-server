@@ -114,9 +114,9 @@ def test_account_login_uses_cli_wire_and_official_identity(tmp_path, monkeypatch
     backend = InspectAgentBackend({'log_dir': str(tmp_path)}, agent_factory=factory)
     item = model('claude-opus-5-5', 'https://api.anthropic.com/v1')
     asyncio.run(backend.start_session(item, {'run_id': 'run', 'robot_type': 'so101',
-                                             'llm_auth': 'claude-code'}))
+                                             'auth_method': 'claude-code'}))
     assert seen['wire'] == 'claude-code'
-    assert seen['model'] == 'anthropic/claude-opus-5-5'
+    assert seen['model'] == 'claude-opus-5-5'
     assert 'api_key_env' not in seen and 'base_url' not in seen
     assert 'ANTHROPIC_API_KEY' not in seen['env']
 
@@ -127,7 +127,7 @@ def test_account_login_uses_cli_wire_and_official_identity(tmp_path, monkeypatch
     ('grok-4.7-so101', 'https://api.yhlxj.ai/v1', 'grok-4.7',
      'https://api.x.ai/v1', 'api_key', 'grok-4.7'),
     ('claude-opus-5-5-so101', 'https://api.yhlxj.ai', 'claude-opus-5-5',
-     'https://api.anthropic.com/v1', 'claude-code', 'anthropic/claude-opus-5-5'),
+     'https://api.anthropic.com/v1', 'claude-code', 'claude-opus-5-5'),
 ])
 def test_router_relay_identity_uses_official_provider(
         tmp_path, public_name, relay_url, api_model, official_url, auth, expected_model):
@@ -141,7 +141,7 @@ def test_router_relay_identity_uses_official_provider(
     backend = InspectAgentBackend({'log_dir': str(tmp_path)},
                                   agent_factory=lambda **kwargs: seen.update(kwargs) or Agent())
     request = {'run_id': 'run', 'robot_type': 'so101'}
-    request.update({'llm_auth': 'claude-code'} if auth == 'claude-code' else {'api_key': 'key'})
+    request.update({'auth_method': 'claude-code'} if auth == 'claude-code' else {'api_key': 'key'})
     asyncio.run(backend.start_session(item, request))
     assert item.public_spec()['name'] == public_name
     assert item.public_spec()['url'] == relay_url
