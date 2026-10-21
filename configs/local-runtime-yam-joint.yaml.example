@@ -1,0 +1,228 @@
+# YAM local evaluation: five VLA checkpoints launched on demand on this GPU,
+# plus three LLMs using Inspect YAM joint control. See the Client's docs/local-evals.md.
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+start_timeout_seconds: 600
+backend:
+  name: auto
+  options:
+    llm:
+      robot_type: yam
+      # REQUIRED: 12 finite values each, left six joints then right six, radians.
+      # Match the Client's calibrated operating limits.
+      joint_low: null
+      joint_high: null
+      joint_max_step: null
+      gripper_open_value: 1
+      sensors: [head_image, left_image, right_image]
+      # REQUIRED: replace with actual joint directions, base mounting and camera geometry.
+      robot_notes: ""
+      effort: low
+      max_llm_calls: 30
+      max_speed_frac: 0.1
+      log_dir: agent-logs
+    vla:
+      http_timeout_seconds: 120
+models:
+  # URLs, model identifiers and revisions must match the Router registration
+  # AND the local snapshots. Launchers need absolute paths; the worker runs
+  # directly, not through a shell that leaves GPU children alive.
+  - name: g05-yam
+    model_type: vla
+    url: https://huggingface.co/RoboColosseum/G05-MolmoAct2-YAM
+    revision: 685add3f748f823c49889f092f6c3cceabcae062
+    runtime_profile: g05-yam-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 32
+    endpoint: http://127.0.0.1:8205
+    backend_options:
+      robot_type: yam
+      adapter: g05_yam
+    launcher:
+      - /usr/bin/env
+      - PYTHONPATH=/absolute/path/to/colosseum-policy-server/src
+      - HF_HUB_OFFLINE=1
+      - /absolute/path/to/GalaxeaVLA/.venv/bin/python
+      - -m
+      - colosseum_policy_server.model_service
+      - g05
+      - --robot-type
+      - yam
+      - --checkpoint
+      - /absolute/path/to/G05-MolmoAct2-YAM
+      - --source-root
+      - /absolute/path/to/GalaxeaVLA
+      - --processor
+      - /absolute/path/to/OpenGalaxea-G05/qwen3_5_2b_base_processor
+      - --g05-parts-meta
+      - /absolute/path/to/colosseum-policy-server/configs/data/parts_meta/yam.yaml
+      - --port
+      - "8205"
+  - name: groot-n17-yam
+    model_type: vla
+    url: https://huggingface.co/NUSMAGIC/GR00T-N1.7-MolmoAct2-YAM
+    revision: 5ba9c403bdb962b88c39f843da536eb8370b61b2
+    runtime_profile: groot-n17-yam-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 16
+    endpoint: http://127.0.0.1:8203
+    backend_options:
+      robot_type: yam
+      adapter: groot_yam
+    launcher:
+      - /usr/bin/env
+      - HF_HUB_OFFLINE=1
+      - /absolute/path/to/lerobot-yam-env/bin/colosseum-policy-model
+      - groot_n17
+      - --robot-type
+      - yam
+      - --checkpoint
+      - /absolute/path/to/GR00T-N1.7-MolmoAct2-YAM
+      - --processor
+      - /absolute/path/to/Qwen3-VL-2B-Instruct
+      - --base-model
+      - /absolute/path/to/GR00T-N1.7-3B
+      - --port
+      - "8203"
+  - name: molmoact2-yam
+    model_type: vla
+    url: https://huggingface.co/allenai/MolmoAct2-BimanualYAM
+    revision: 8dcbed66f2380e4393189c303ea72488eb9e63c2
+    runtime_profile: molmoact2-yam-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 30
+    endpoint: http://127.0.0.1:8202
+    backend_options:
+      robot_type: yam
+      adapter: molmoact2_yam
+      num_steps: 10
+    launcher:
+      - /usr/bin/env
+      - PYTHONPATH=/absolute/path/to/colosseum-policy-server/src
+      - HF_HUB_OFFLINE=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - /absolute/path/to/molmoact2/.venv/bin/python
+      - -m
+      - colosseum_policy_server.model_service
+      - molmoact2
+      - --robot-type
+      - yam
+      - --checkpoint
+      - /absolute/path/to/MolmoAct2-BimanualYAM
+      - --dtype
+      - float32
+      - --port
+      - "8202"
+  - name: lingbot-vla-v2-6b-yam
+    model_type: vla
+    url: https://huggingface.co/helen9975/lingbot-vla-v2-6b-molmoact2-yam
+    revision: af7529f2ea27ff6e77911a98f86c40cfb75d229e
+    runtime_profile: lingbot-vla-v2-6b-yam-v1
+    subfolder: checkpoints/global_step_40000/hf_ckpt
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 30
+    endpoint: http://127.0.0.1:8206
+    backend_options:
+      robot_type: yam
+      adapter: lingbot_yam
+    launcher:
+      - /usr/bin/env
+      - PYTHONPATH=/absolute/path/to/colosseum-policy-server/src
+      - HF_HUB_OFFLINE=1
+      - /absolute/path/to/lingbot-vla-v2/.venv/bin/python
+      - -m
+      - colosseum_policy_server.model_service
+      - lingbot_v2
+      - --robot-type
+      - yam
+      - --checkpoint
+      - /absolute/path/to/lingbot-vla-v2-6b-molmoact2-yam/checkpoints/global_step_40000/hf_ckpt
+      - --source-root
+      - /absolute/path/to/lingbot-vla-v2
+      - --processor
+      - /absolute/path/to/Qwen3-VL-4B-Instruct
+      # Optional: execute only the first N of the 30 predicted actions.
+      - --lingbot-return-steps
+      - "15"
+      - --port
+      - "8206"
+  - name: pi05-yam
+    model_type: vla
+    url: https://huggingface.co/NUSMAGIC/pi05-MolmoAct2-YAM
+    revision: 2f28d00ac28c543626f5a4f579a3da09bee4a4ed
+    runtime_profile: pi05-yam-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 30
+    endpoint: http://127.0.0.1:8204
+    backend_options:
+      robot_type: yam
+      adapter: pi05_yam
+    launcher:
+      - /usr/bin/env
+      - HF_HUB_OFFLINE=1
+      - /absolute/path/to/lerobot-yam-env/bin/colosseum-policy-model
+      - pi05_lerobot
+      - --robot-type
+      - yam
+      - --checkpoint
+      - /absolute/path/to/pi05-MolmoAct2-YAM
+      - --tokenizer
+      - /absolute/path/to/paligemma-3b-pt-224
+      - --num-steps
+      - "10"
+      - --port
+      - "8204"
+  # LLMs and VLAs share the Router's 14-D joint_position contract
+  # (Client: use_local_action_contract: false).
+  # llm_endpoint: official sends Client keys to the official OpenAI, xAI or
+  # Anthropic API instead of the Router URL. Claude Code login ignores it.
+  - name: grok-4.7
+    model_type: llm
+    url: https://api.yhlxj.ai/v1
+    revision: "4.7"
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      control_mode: joint_pos
+      llm_endpoint: official
+  - name: claude-opus-5-5
+    model_type: llm
+    url: https://api.yhlxj.ai
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      control_mode: joint_pos
+      llm_endpoint: official
+  - name: gpt-6-astra
+    model_type: llm
+    url: https://api.yhlxj.ai/v1
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      control_mode: joint_pos
+      llm_endpoint: official
