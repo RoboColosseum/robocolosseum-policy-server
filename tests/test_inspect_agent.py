@@ -313,11 +313,10 @@ async def test_auto_flat_options_and_session_switch(tmp_path):
     assert backend.active is None
 
 
-@pytest.mark.parametrize('robot', ['so101'])
-async def test_llm_rejects_unimplemented_robot_before_creating_agent(tmp_path, robot):
+async def test_llm_rejects_wrong_so101_action_contract_before_creating_agent(tmp_path):
     backend = InspectAgentBackend(options(tmp_path))
-    with pytest.raises(ValueError, match='not implemented'):
-        await backend.start_session(model(), {'run_id': 'r', 'api_key': 'test', 'robot_type': robot})
+    with pytest.raises(ValueError, match='so101 LLM requires 6-D joint_position'):
+        await backend.start_session(model(), {'run_id': 'r', 'api_key': 'test', 'robot_type': 'so101'})
     assert backend.agent is None
 
 @pytest.mark.parametrize('provider,name,wire,path', [

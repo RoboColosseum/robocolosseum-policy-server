@@ -22,7 +22,7 @@ from .observation import _rgb, _state
 from .franka_vla import _finite_matrix, _nonempty, _positive_float
 from ..numpy_wire import _json_array, _json_decode, _msgpack_default, _msgpack_object
 
-HTTP_ADAPTERS = frozenset({'molmoact2_so101', 'pi05_so101', 'groot_so101'})
+HTTP_ADAPTERS = frozenset({'molmoact2_so101', 'pi05_so101', 'groot_so101', 'lingbot_so101'})
 ADAPTERS = HTTP_ADAPTERS | {'g05_so101'}
 # Earlier LeRobot SO100/101 frame: model = sign * current + offset (degrees).
 LEGACY_SIGNS = np.array([1, -1, 1, 1, 1, 1], dtype=np.float32)

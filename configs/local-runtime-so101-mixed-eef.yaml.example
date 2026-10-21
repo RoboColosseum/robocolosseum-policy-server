@@ -1,0 +1,113 @@
+# Replace all /path/to placeholders. Each interpreter belongs to that model's own
+# environment with this Policy package installed --no-deps; see docs/so101.md.
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+start_timeout_seconds: 600
+backend:
+  name: auto
+  options:
+    external_sensor: head_image
+    wrist_sensor: left_image
+    http_timeout_seconds: 60
+    llm:
+      robot_type: so101
+      control_mode: eef_delta_pose
+      sensors: [head_image, left_image]
+      robot_notes: "Describe this rig's camera views, workspace and EEF frame before use."
+      effort: low
+      images: always
+      # If Claude Code is installed outside PATH, set its absolute CLI path:
+      # claude_command: /absolute/path/to/claude
+models:
+  # Identity, revision and action contract must match the Router registration.
+  - name: molmoact2-so101
+    url: https://huggingface.co/allenai/MolmoAct2-SO100_101
+    revision: "152569fe57914d97be91055800035f54e250d009"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 30
+    endpoint: http://127.0.0.1:9201
+    backend_options: {robot_type: so101, adapter: molmoact2_so101, num_steps: 10}
+    launcher: [/path/to/molmo-env/bin/python, -m, colosseum_policy_server.model_service,
+               molmoact2, --robot-type, so101, --checkpoint, /path/to/MolmoAct2-SO100_101-snapshot,
+               --device, "cuda:0", --dtype, bfloat16, --port, "9201"]
+  - name: pi05-so101
+    url: https://huggingface.co/hqfang/pi05-so100_101
+    revision: "d3204e03ae84d232e2493a933fd460515904eb58"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 50
+    endpoint: http://127.0.0.1:9212
+    backend_options: {robot_type: so101, adapter: pi05_so101, num_steps: 10}
+    launcher: [/path/to/pi05-so101-env/bin/python, -m, colosseum_policy_server.model_service,
+               pi05_lerobot, --robot-type, so101, --checkpoint, /path/to/pi05-so100_101-snapshot,
+               --device, cuda, --port, "9212"]
+  - name: g05-so101
+    url: https://huggingface.co/OpenGalaxea/G05
+    revision: "e312be81e90c56a55bcb26b57429bd39a335b449"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 30
+    endpoint: ws://127.0.0.1:9204
+    backend_options: {robot_type: so101, adapter: g05_so101}
+    launcher: [/path/to/g05-env/bin/python, -m, colosseum_policy_server.model_service,
+               g05, --robot-type, so101, --source-root, /path/to/GalaxeaVLA,
+               --checkpoint, /path/to/g05-snapshot/g05-so101/checkpoints/model_state_dict.pt,
+               --device, cuda, --action-steps, "30", --port, "9204"]
+  # max_horizon is the model's chunk length; confirm it against the Router registration.
+  - name: groot-n17-so101
+    url: https://huggingface.co/hqfang/groot-so100_101
+    revision: "f5e17af8948a647e4c23186a27927bf73d6d784e"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 40
+    endpoint: http://127.0.0.1:9217
+    backend_options: {robot_type: so101, adapter: groot_so101}
+    launcher: [/path/to/groot-env/bin/python, -m, colosseum_policy_server.model_service,
+               groot_n17, --robot-type, so101, --checkpoint, /path/to/groot-so100_101-snapshot,
+               --base-model, /path/to/GR00T-N1.7-3B-snapshot, --device, cuda, --port, "9217"]
+  # The Router's assigned LLM control_hz governs inference and recording; the
+  # local rate below is only a required configuration value. Match all other
+  # public fields to the Router's model descriptor, not the leaderboard policyId.
+  # When the Router registers a
+  # relay URL or a rig-suffixed name, keep those values as the public identity;
+  # backend_options.api_base_url selects the official API and
+  # backend_options.api_model selects the provider's unsuffixed model ID.
+  # Example: public name gpt-6-astra-so101, public url https://relay.example/v1,
+  # backend_options: {robot_type: so101, api_model: gpt-6-astra,
+  #                   api_base_url: https://api.openai.com/v1}
+  - name: gpt-6-astra
+    model_type: llm
+    url: https://api.openai.com/v1
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 10
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options: {robot_type: so101, api_base_url: https://api.openai.com/v1}
+  - name: grok-4.7
+    model_type: llm
+    url: https://api.x.ai/v1
+    revision: "4.7"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 10
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options: {robot_type: so101, api_base_url: https://api.x.ai/v1}
+  - name: claude-opus-5-5
+    model_type: llm
+    url: https://api.anthropic.com/v1
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 10
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options: {robot_type: so101, api_base_url: https://api.anthropic.com/v1}

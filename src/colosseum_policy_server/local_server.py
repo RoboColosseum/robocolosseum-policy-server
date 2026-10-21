@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from dataclasses import replace
+import signal
 
 from websockets.asyncio.server import serve
 
@@ -15,8 +16,14 @@ async def run(config: RuntimeConfig) -> None:
     async with serve(runtime.handle, config.host, config.port, compression=None, max_size=32 * 1024 * 1024,
                      ping_interval=20, ping_timeout=60):
         print(f"Local Policy Server listening on ws://{config.host}:{config.port}; real model runtime only", flush=True)
+        # A closed terminal (SIGHUP) or kill (SIGTERM) would otherwise exit
+        # without stopping the model service; shut down as for Ctrl+C.
+        stopped = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        for sig in (signal.SIGTERM, signal.SIGHUP):
+            loop.add_signal_handler(sig, stopped.set)
         try:
-            await asyncio.Future()
+            await stopped.wait()
         finally:
             await runtime.supervisor.stop()
 

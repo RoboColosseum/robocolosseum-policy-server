@@ -26,6 +26,9 @@ class JointRobotContract:
     state_key: str = 'joint_position'
     gripper_indices: tuple[int, ...] = (7,)
     binary_gripper: bool = True
+    gripper_high: float = 1.0
+    gripper_max_step: float = 1.0
+    state_unit: str = 'rad+normalized'
 
     @property
     def action_dim(self):
@@ -40,6 +43,9 @@ class JointRobotContract:
         if self.name == 'yam':
             return tuple(label for side in ('left', 'right')
                          for label in (*[f'{side}_joint{i+1}' for i in range(6)], f'{side}_gripper'))
+        if self.name == 'so101':
+            return ('shoulder_pan', 'shoulder_lift', 'elbow_flex',
+                    'wrist_flex', 'wrist_roll', 'gripper')
         return tuple(f'joint{i+1}' for i in range(self.joint_count)) + ('gripper',)
 
     def pack(self, joints, grippers):
@@ -60,6 +66,10 @@ def llm_robot_contract(robot):
     # implemented. Never infer embodiment from action dimension alone.
     if robot == 'yam':
         return JointRobotContract('yam', 12, gripper_indices=(6, 13), binary_gripper=False)
+    if robot == 'so101':
+        return JointRobotContract('so101', 5, gripper_indices=(5,),
+                                  binary_gripper=False, gripper_high=100.0,
+                                  gripper_max_step=5.0, state_unit='degrees+gripper_0_100')
     if robot != 'franka':
         raise ValueError(f'LLM robot adapter {robot!r} is not implemented')
     return JointRobotContract('franka', 7)

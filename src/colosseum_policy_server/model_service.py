@@ -24,7 +24,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("model", choices=["molmoact2", "pi05_lerobot", "groot_n17", "lap_3b", "g05", "lingbot_v2"])
     parser.add_argument("--robot-type", choices=["franka", "yam", "so101"], default="franka",
-                        help="embodiment (default: franka); so101: molmoact2/pi05_lerobot/groot_n17/g05")
+                        help="embodiment (default: franka); so101: molmoact2/pi05_lerobot/groot_n17/g05/lingbot_v2")
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--tokenizer", type=Path)
     parser.add_argument("--stats", type=Path)
@@ -48,10 +48,10 @@ def parse_args(argv=None):
     parser.add_argument("--g05-override", action="append", default=[], metavar="KEY=VALUE",
                         help="extra upstream G05 Hydra override for SO101 (repeatable)")
     parser.add_argument("--lingbot-return-steps", type=int, default=30,
-                        help="return only the first N of LingBot's 30 predicted actions")
+                        help="YAM: return only the first N of LingBot's 30 predicted actions")
     args = parser.parse_args(argv)
-    if args.model == "lingbot_v2" and args.robot_type != "yam":
-        parser.error("lingbot_v2 currently supports --robot-type yam only")
+    if args.model == "lingbot_v2" and args.robot_type not in {"yam", "so101"}:
+        parser.error("lingbot_v2 currently supports --robot-type yam or so101 only")
     if args.lingbot_compile and args.model != "lingbot_v2":
         parser.error("--lingbot-compile requires lingbot_v2")
     if not 1 <= args.lingbot_return_steps <= 30:
@@ -62,8 +62,8 @@ def parse_args(argv=None):
         parser.error("port must be valid and --num-steps must be in [1, 10]")
     if args.robot_type == "yam" and args.model not in {"molmoact2", "groot_n17", "pi05_lerobot", "g05", "lingbot_v2"}:
         parser.error("--robot-type yam is implemented only for molmoact2, groot_n17, pi05_lerobot, g05 and lingbot_v2")
-    if args.robot_type == "so101" and args.model not in {"molmoact2", "pi05_lerobot", "groot_n17", "g05"}:
-        parser.error("--robot-type so101 is implemented only for molmoact2, pi05_lerobot, groot_n17 and g05")
+    if args.robot_type == "so101" and args.model not in {"molmoact2", "pi05_lerobot", "groot_n17", "g05", "lingbot_v2"}:
+        parser.error("--robot-type so101 is implemented only for molmoact2, pi05_lerobot, groot_n17, g05 and lingbot_v2")
     if not 1 <= args.action_steps <= 64 or any("=" not in item for item in args.g05_override):
         parser.error("--action-steps must be in [1, 64] and --g05-override must be KEY=VALUE")
     if args.g05_parts_meta is not None and (args.model != "g05" or args.robot_type != "yam"):
@@ -112,7 +112,10 @@ def parse_args(argv=None):
     if args.model == "groot_n17" and args.robot_type in {"yam", "so101"} and not args.base_model.is_dir():
         parser.error("--base-model must be a local directory")
     if args.model == "lingbot_v2":
-        from .yam_lingbot import validate_assets
+        if args.robot_type == "so101":
+            from .so101_lingbot import validate_assets
+        else:
+            from .yam_lingbot import validate_assets
         try:
             validate_assets(args.checkpoint, args.source_root, args.processor)
         except (OSError, ValueError, KeyError, TypeError) as exc:
@@ -250,11 +253,15 @@ def main(argv=None):
         with HTTPServer((args.host, args.port), http_handler(runtime)) as server:
             server.serve_forever()
     elif args.model == "lingbot_v2":
-        from .yam_lingbot import LingBotYAMRuntime
-        runtime = LingBotYAMRuntime(args.checkpoint, source_root=args.source_root,
-                                    processor=args.processor, device=args.device, dtype=args.dtype,
-                                    use_compile=args.lingbot_compile,
-                                    return_steps=args.lingbot_return_steps)
+        options = dict(use_compile=args.lingbot_compile)
+        if args.robot_type == "so101":
+            # SO101 serves the checkpoint's full 50-step chunk; return steps are YAM-only.
+            from .so101_lingbot import LingBotSO101Runtime as LingBotRuntime
+        else:
+            from .yam_lingbot import LingBotYAMRuntime as LingBotRuntime
+            options["return_steps"] = args.lingbot_return_steps
+        runtime = LingBotRuntime(args.checkpoint, source_root=args.source_root,
+                                 processor=args.processor, device=args.device, dtype=args.dtype, **options)
         with HTTPServer((args.host, args.port), http_handler(runtime)) as server:
             server.serve_forever()
     elif args.model == "pi05_lerobot":

@@ -23,6 +23,14 @@ class AutoBackend:
             raise RuntimeError('Model session is not prepared')
         return await self.active.infer(model, observation)
 
+    @property
+    def control_mode(self):
+        return getattr(self.active, 'control_mode', 'joint_pos')
+
+    @property
+    def internal_action_dim(self):
+        return getattr(self.active, 'internal_action_dim', None)
+
     async def end_session(self):
         active, self.active = self.active, None
         if active is not None and hasattr(active, 'end_session'):
