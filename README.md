@@ -210,7 +210,13 @@ resulting actions are sent back through the Router.
 For typed `model_type: llm` entries, `url` is the HTTPS API base URL and must
 match the Router deployment. Model names choose defaults: `gpt-*` uses Responses,
 `grok-*` uses Chat Completions, and `claude-*` uses Anthropic Messages. The raw
-model name is sent to the provider (no added `openai/` or `anthropic/` prefix).
+model name is sent to the provider by default. If the Router's public name has
+a rig suffix, set `backend_options.api_model` to the provider's actual model ID.
+Use the Router preparation's `model.name`; the leaderboard `policyId` can have a
+different suffix. If the Router's public URL is a relay, set `backend_options.api_base_url` to the
+official API URL for direct inference. Neither override changes the Router
+identity used by the local runtime. Claude Code account login uses the same
+`api_model` with the official CLI.
 A root Anthropic URL is normalized to `/v1` for the Messages client.
 
 Keys still come from the Client, per trial; no keys belong in this config or

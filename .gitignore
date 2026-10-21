@@ -6,3 +6,6 @@ dist/
 *.egg-info/
 configs/policy.yaml
 local-receipts.jsonl
+
+# Inspect agent transcripts written at runtime
+agent-logs/
