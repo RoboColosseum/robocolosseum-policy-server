@@ -64,6 +64,20 @@ async def test_eef_local_contract_preserves_router_model_and_run_id(tmp_path):
 
 class FailingSupervisor:
     async def activate(self, model): raise RuntimeError("private launcher detail")
+    async def stop(self): pass
+
+
+class RecordingSupervisor:
+    def __init__(self): self.calls = []
+    async def activate(self, model): self.calls.append('activate')
+    async def stop(self): self.calls.append('stop')
+
+
+async def test_worker_is_stopped_when_its_session_closes(tmp_path):
+    supervisor = RecordingSupervisor()
+    close = pb.RelayFrame(type=pb.SESSION_CLOSE, session_id='run').SerializeToString()
+    await LocalPolicyRuntime(config(tmp_path), Backend(), supervisor).handle(Socket([prepare(), close]))
+    assert supervisor.calls == ['activate', 'stop']
 
 
 @pytest.mark.parametrize('fails', [False, True])
