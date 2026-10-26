@@ -193,3 +193,33 @@ def test_g05_so101_launches_upstream_with_chunking_and_overrides(tmp_path, monke
     monkeypatch.setattr(model_service.runpy, 'run_path', lambda *a, **k: seen.extend(model_service.sys.argv))
     model_service.run_g05(args)
     assert seen[-4:] == ['--action_steps', '30', 'eval_embodiment=so100', 'model.use_torch_compile=false']
+
+
+@pytest.mark.parametrize('robot_type, module, runtime_name, expected', [
+    ('so101', 'so101_lingbot', 'LingBotSO101Runtime', {'use_compile': False}),
+    ('yam', 'yam_lingbot', 'LingBotYAMRuntime', {'use_compile': False, 'return_steps': 12}),
+])
+def test_lingbot_worker_passes_return_steps_only_to_yam(tmp_path, monkeypatch, robot_type, module, runtime_name,
+                                                        expected):
+    import importlib
+    from colosseum_policy_server import model_service
+    runtime_module = importlib.import_module(f'colosseum_policy_server.{module}')
+    seen = {}
+
+    class Runtime:
+        def __init__(self, checkpoint, *, source_root, processor, device, dtype, **options):
+            seen.update(options)
+
+    class Server:
+        def __init__(self, *args): pass
+        def __enter__(self): return self
+        def __exit__(self, *exc): return False
+        def serve_forever(self): pass
+
+    monkeypatch.setattr(runtime_module, 'validate_assets', lambda *args: None)
+    monkeypatch.setattr(runtime_module, runtime_name, Runtime)
+    monkeypatch.setattr(model_service, 'HTTPServer', Server)
+    model_service.main(['lingbot_v2', '--robot-type', robot_type, '--checkpoint', str(tmp_path),
+                        '--source-root', str(tmp_path), '--processor', str(tmp_path),
+                        '--lingbot-return-steps', '12', '--port', '9218'])
+    assert seen == expected

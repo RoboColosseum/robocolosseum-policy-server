@@ -46,7 +46,8 @@ async def test_official_api_endpoint_is_independent_of_router_url(name, key, bas
 
 
 @pytest.mark.asyncio
-async def test_claude_account_login_uses_cli_without_key_or_http_url():
+async def test_claude_account_login_uses_cli_without_key_or_http_url(monkeypatch):
+    monkeypatch.setenv('ANTHROPIC_API_KEY', 'host-secret')
     calls = []
     backend = InspectAgentBackend(_options(), agent_factory=lambda **kwargs: calls.append(kwargs) or object())
     await backend.start_session(_model('claude-opus-5-5'),
@@ -54,7 +55,8 @@ async def test_claude_account_login_uses_cli_without_key_or_http_url():
     assert calls[0]['wire'] == 'claude-code'
     assert calls[0]['model'] == 'claude-opus-5-5'
     assert 'base_url' not in calls[0] and 'api_key_env' not in calls[0]
-    assert 'env' not in calls[0]
+    # The CLI must use the account login, not a host API key.
+    assert 'ANTHROPIC_API_KEY' not in calls[0]['env']
 
 
 @pytest.mark.asyncio

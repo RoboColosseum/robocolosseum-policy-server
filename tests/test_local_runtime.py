@@ -64,6 +64,20 @@ async def test_eef_local_contract_preserves_router_model_and_run_id(tmp_path):
 
 class FailingSupervisor:
     async def activate(self, model): raise RuntimeError("private launcher detail")
+    async def stop(self): pass
+
+
+class RecordingSupervisor:
+    def __init__(self): self.calls = []
+    async def activate(self, model): self.calls.append('activate')
+    async def stop(self): self.calls.append('stop')
+
+
+async def test_worker_is_stopped_when_its_session_closes(tmp_path):
+    supervisor = RecordingSupervisor()
+    close = pb.RelayFrame(type=pb.SESSION_CLOSE, session_id='run').SerializeToString()
+    await LocalPolicyRuntime(config(tmp_path), Backend(), supervisor).handle(Socket([prepare(), close]))
+    assert supervisor.calls == ['activate', 'stop']
 
 
 @pytest.mark.parametrize('fails', [False, True])
@@ -230,6 +244,36 @@ async def test_prepare_profile_is_optional_metadata(tmp_path, subfolder, profile
     assert reply.type == pb.ACTION_PLAN
     assert list(pb.ActionPlan.FromString(reply.payload).actions.shape) == [1, 8]
     assert ready['model'] == spec
+
+
+async def test_llm_uses_router_assigned_frequency_while_matching_public_identity(tmp_path):
+    from colosseum_policy_server.local_protocol import decode_control
+    item = LocalModel.from_mapping({
+        'name': 'claude-opus-5-5', 'model_type': 'llm',
+        'url': 'https://api.yhlxj.ai', 'revision': 'rig-v1',
+        'action_space': 'joint_position', 'action_dim': 6,
+        'control_hz': 10, 'max_horizon': 150,
+        'endpoint': 'inprocess://inspect-agent',
+        'backend_options': {'api_base_url': 'https://api.anthropic.com/v1'},
+    })
+    cfg = RuntimeConfig('127.0.0.1', 8000, 'unused', {}, tmp_path, 1, {item.name: item})
+    assigned = {**item.public_spec(), 'control_hz': 30, 'runtime_profile': 'inspect-agent-v1'}
+    request = encode_control({'type': 'prepare', 'protocol_version': 1,
+        'run_id': 'run', 'preparation_id': 'prep', 'model': assigned})
+    close = pb.RelayFrame(protocol_version=1, type=pb.SESSION_CLOSE,
+                          session_id='run').SerializeToString()
+
+    class CapturingBackend(Backend):
+        async def start_session(self, model, request):
+            self.started_model = model
+
+    backend = CapturingBackend()
+    ws = Socket([request, close])
+    await LocalPolicyRuntime(cfg, backend).handle(ws)
+    assert decode_control(ws.sent[0])['type'] == 'ready'
+    assert backend.started_model.control_hz == 30
+    assert backend.started_model.public_spec() == {key: value for key, value in assigned.items()
+                                                   if key != 'runtime_profile'}
 
 
 @pytest.mark.parametrize('filename', ['local-runtime.yaml.example', 'local-runtime-droid-example.yaml'])

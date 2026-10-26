@@ -1,13 +1,16 @@
 """Stateful Inspect Robots LLM policy behind Colosseum's Local Protocol.
 
-No robot driver is loaded here. The Client executes Franka commands or bimanual
-YAM joint/EE commands. Optional Inspect dependencies load on session startup.
+Robot drivers stay on the Client: it executes Franka commands, bimanual YAM
+joint/EE commands, or SO101 joint/EEF commands. Optional Inspect dependencies
+load on session startup.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import os
+import re
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Mapping
@@ -56,54 +59,83 @@ class InspectAgentBackend:
         if self.agent is not None or self._inflight is not None:
             raise RuntimeError("previous agent session has not closed")
         settings = {**self.options, **model.backend_options}
-        self.robot = llm_robot_contract(session_robot(model, request, self.options))
-        self.robot.validate(model)
-        self.eef_mode = self.robot.name == 'yam' and settings.get('control_mode') == 'eef_abs_pose'
-        self.joint_count = self.robot.joint_count
-        self.joint_indices = list(self.robot.joint_indices)
-        self.gripper_indices = list(self.robot.gripper_indices)
-        self.gripper_count = len(self.gripper_indices)
+        robot_type = session_robot(model, request, self.options)
+        self.control_mode = settings.get("control_mode", "joint_pos")
+        self.internal_action_dim = model.action_dim
+        self.eef_mode = False
+        if self.control_mode == "eef_delta_pose":
+            if robot_type != "so101" or model.action_space != "joint_position" or model.action_dim != 6:
+                raise ValueError("SO101 EEF requires a 6-D public joint_position contract")
+            from inspect_robots.spaces import ActionSemantics
+            if not {'agent_eef_target', 'max_chunk_steps'} <= set(ActionSemantics.__dataclass_fields__):
+                raise RuntimeError('Installed Inspect Robots lacks SO101 EEF agent semantics')
+            self.robot = SimpleNamespace(name="so101")
+            self.internal_action_dim = 7
+        elif self.control_mode in {"joint_pos", "eef_abs_pose"}:
+            self.robot = llm_robot_contract(robot_type)
+            self.robot.validate(model)
+            # YAM's EEF mode keeps the joint contract for observed state and bounds.
+            self.eef_mode = self.control_mode == "eef_abs_pose"
+            if self.eef_mode and self.robot.name != "yam":
+                raise ValueError("eef_abs_pose is only supported for YAM")
+            self.joint_count = self.robot.joint_count
+            self.joint_indices = list(self.robot.joint_indices)
+            self.gripper_indices = list(self.robot.gripper_indices)
+            self.gripper_count = len(self.gripper_indices)
+        else:
+            raise ValueError(f"unsupported LLM control_mode {self.control_mode!r}")
         identity = urlsplit(model.url)
         typed = model.model_type == "llm"
         providers = {"gpt-": ("openai", "OPENAI_API_KEY"),
                      "grok-": ("x-ai", "XAI_API_KEY"),
                      "claude-": ("anthropic", "ANTHROPIC_API_KEY")}
         if typed:
-            provider, key_env = next((value for prefix, value in providers.items()
-                                      if model.name.startswith(prefix)), (None, None))
+            provider, key_env, model_prefix = next(
+                ((value[0], value[1], prefix) for prefix, value in providers.items()
+                 if model.name.startswith(prefix)), (None, None, None))
             if provider is None:
                 raise ValueError("Unsupported LLM model name")
+            # Router names may include a robot suffix. Keep that exact public
+            # identity for matching, but send the provider's model ID to its API.
+            api_model = settings.get("api_model", model.name)
+            if (not isinstance(api_model, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]*", api_model)
+                    or not api_model.startswith(model_prefix)):
+                raise ValueError("api_model must be a model ID for the assigned LLM provider")
             identity = urlsplit(f"llm://{provider}/{model.name}")
         if model.url.startswith("https://huggingface.co/"):
             identity = urlsplit("llm://" + str(model.backend_options.get("agent_model", "")))
         wires = {"openai": "responses", "x-ai": "chat", "anthropic": "messages"}
         if identity.scheme != "llm" or identity.netloc not in wires or model.endpoint != "inprocess://inspect-agent":
             raise ValueError("inspect_agent requires an llm://provider/model identity")
-        self.low = self._vector(settings, "joint_low", self.joint_count)
-        self.high = self._vector(settings, "joint_high", self.joint_count)
-        self.max_step = self._vector(settings, "joint_max_step", self.joint_count)
-        if np.any(self.low >= self.high) or np.any(self.max_step <= 0):
-            raise ValueError("joint bounds must increase and joint_max_step must be positive")
-        self.open_value = settings.get("gripper_open_value")
-        if type(self.open_value) is not int or self.open_value not in {0, 1}:
-            raise ValueError("declare gripper_open_value as 0 or 1 for the Client driver")
-        if self.robot.name == 'yam' and self.open_value != 1:
-            raise ValueError('YAM requires gripper_open_value: 1')
+        if self.control_mode != "eef_delta_pose":
+            self.low = self._vector(settings, "joint_low", self.joint_count)
+            self.high = self._vector(settings, "joint_high", self.joint_count)
+            self.max_step = self._vector(settings, "joint_max_step", self.joint_count)
+            if np.any(self.low >= self.high) or np.any(self.max_step <= 0):
+                raise ValueError("joint bounds must increase and joint_max_step must be positive")
+            self.open_value = settings.get("gripper_open_value")
+            if type(self.open_value) is not int or self.open_value not in {0, 1}:
+                raise ValueError("declare gripper_open_value as 0 or 1 for the Client driver")
+            if self.robot.name in {'yam', 'so101'} and self.open_value != 1:
+                raise ValueError(f'{self.robot.name} requires gripper_open_value: 1')
         default_sensors = ['head_image', 'left_image', 'right_image'] if self.robot.name == 'yam' else ['head_image', 'left_image']
         self.sensors = tuple(settings.get("sensors", default_sensors))
         if self.robot.name == 'yam' and set(self.sensors) != set(default_sensors):
             raise ValueError('YAM requires head_image, left_image and right_image')
-        self.joint_low = self.robot.pack(self.low, np.zeros(self.gripper_count))
-        self.joint_high = self.robot.pack(self.high, np.ones(self.gripper_count))
-        self.action_low = (self._vector(settings, 'eef_low', 14) if self.eef_mode else self.joint_low)
-        self.action_high = (self._vector(settings, 'eef_high', 14) if self.eef_mode else self.joint_high)
-        if np.any(self.action_low > self.action_high):
-            raise ValueError('EEF workspace requires eef_low <= eef_high')
-        self.action_max_step = self.robot.pack(self.max_step, np.ones(self.gripper_count))
+        if self.control_mode != "eef_delta_pose":
+            self.joint_low = self.robot.pack(self.low, np.zeros(self.gripper_count))
+            self.joint_high = self.robot.pack(
+                self.high, np.full(self.gripper_count, self.robot.gripper_high))
+            self.action_low = (self._vector(settings, 'eef_low', 14) if self.eef_mode else self.joint_low)
+            self.action_high = (self._vector(settings, 'eef_high', 14) if self.eef_mode else self.joint_high)
+            if np.any(self.action_low > self.action_high):
+                raise ValueError('EEF workspace requires eef_low <= eef_high')
+            self.action_max_step = self.robot.pack(
+                self.max_step, np.full(self.gripper_count, self.robot.gripper_max_step))
         if not self.sensors or any(not isinstance(s, str) or not s for s in self.sensors) or len(set(self.sensors)) != len(self.sensors):
             raise ValueError("sensors must be nonempty unique sensor names")
         self.docs = str(settings.get("robot_notes", ""))
-        if not self.docs.strip():
+        if not self.docs.strip() and self.control_mode != "eef_delta_pose":
             raise ValueError("robot_notes must describe the rig and joint directions")
         self.log_dir = Path(settings.get("log_dir", "agent-logs"))
         self.log_id = uuid4().hex  # Never use a peer's run_id as a path.
@@ -122,17 +154,33 @@ class InspectAgentBackend:
             "images", "image_horizon",
         ) if key in settings}
         kwargs.setdefault("effort", "low")
-        kwargs.setdefault("max_llm_calls", 30)
+        if self.control_mode == "eef_delta_pose":
+            # Inspect requires a positive integer call budget, but the Router
+            # governs trial steps. Its step budget cannot double as a call cap:
+            # malformed tool calls can consume calls without moving the robot.
+            kwargs["max_llm_calls"] = 2**31 - 1
+            kwargs.pop("max_speed_frac", None)
+        else:
+            kwargs.setdefault("max_llm_calls", 30)
         auth_method = request.get("auth_method", "api-key")
         if auth_method not in {"api-key", "claude-code"}:
             raise ValueError("Unsupported LLM authentication method")
         endpoint = settings.get("llm_endpoint", "router")
         if endpoint not in {"router", "official"}:
             raise ValueError("llm_endpoint must be router or official")
-        if auth_method == "claude-code":
+        account = auth_method == "claude-code"
+        if account:
             if not typed or provider != "anthropic" or request.get("api_key"):
                 raise ValueError("Claude Code login is only valid for Claude without an API key")
+            # The CLI uses the host's account login; keep API credentials and
+            # alternate-cloud switches out of its environment.
             kwargs.update(
+                env={key: value for key, value in os.environ.items() if key not in {
+                    "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL",
+                    "ANTHROPIC_PROFILE", "ANTHROPIC_FEDERATION_RULE_ID",
+                    "ANTHROPIC_ORGANIZATION_ID", "CLAUDE_CODE_USE_BEDROCK",
+                    "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+                    "CLAUDE_CODE_USE_ANTHROPIC_AWS"}},
                 claude_command=settings.get("claude_command"),
                 claude_timeout_s=settings.get("claude_timeout_s", 120),
             )
@@ -142,9 +190,15 @@ class InspectAgentBackend:
                 raise ValueError("Client must supply its API key for this LLM")
             # Per-agent credential environment; never mutate process env or
             # fall back to another Client's / the host's provider credentials.
-            # official: the Router URL stays the model identity only, so
-            # official keys are never sent to a relay URL in that descriptor.
-            base_url = OFFICIAL_LLM_URLS[provider] if endpoint == "official" else model.url.rstrip("/")
+            # official / api_base_url: the Router URL stays the model identity
+            # only, so official keys are never sent to a relay URL in that descriptor.
+            official = OFFICIAL_LLM_URLS[provider]
+            base_url = str(settings.get("api_base_url")
+                           or (official if endpoint == "official" else model.url)).rstrip("/")
+            if settings.get("api_base_url") and base_url != official:
+                raise ValueError("api_base_url override must be the selected provider's official API URL")
+            if self.control_mode == "eef_delta_pose" and base_url != official:
+                raise ValueError("SO101 EEF LLM requires the provider's official API URL")
             # Inspect appends /messages; Anthropic URLs may be supplied at root.
             if provider == "anthropic" and not urlsplit(base_url).path.strip("/"):
                 base_url += "/v1"
@@ -156,10 +210,10 @@ class InspectAgentBackend:
                 from .llm_transport import BearerTransport
                 kwargs["transport"] = BearerTransport(api_key)
         try:
-            wire = "claude-code" if auth_method == "claude-code" else settings.get("api_format", wires[identity.netloc])
-            self.agent = factory(model=model.name if typed else f"{identity.netloc}/{identity.path.lstrip('/')}",
+            wire = "claude-code" if account else settings.get("api_format", wires[identity.netloc])
+            self.agent = factory(model=api_model if typed else f"{identity.netloc}/{identity.path.lstrip('/')}",
                                  wire=wire, wire_capture=False, **kwargs)
-            if typed and auth_method != "claude-code" and urlsplit(kwargs["base_url"]).hostname != "api.openai.com":
+            if typed and not account and urlsplit(kwargs["base_url"]).hostname != "api.openai.com":
                 # Pinned Inspect enables explicit GPT cache breakpoints by model
                 # name alone. Relays may reject them; keep stateless full history.
                 client = getattr(self.agent, "_client", None)
@@ -193,6 +247,8 @@ class InspectAgentBackend:
                 self._inflight = None
 
     def _infer(self, observation):
+        if self.control_mode == "eef_delta_pose":
+            return self._infer_so101_eef(observation)
         from inspect_robots.embodiment import EmbodimentInfo
         from inspect_robots.scene import Scene
         from inspect_robots.spaces import ActionSemantics, Box, CameraSpec, ObservationSpace, StateField, StateSpec
@@ -226,10 +282,12 @@ class InspectAgentBackend:
                         dim_labels=YAM_EEF_LABELS if self.eef_mode else self.robot.labels,
                         max_step=None if self.eef_mode else tuple(self.action_max_step))),
                 observation_space=ObservationSpace(cameras=cameras,
-                    state=StateSpec((StateField("joint_pos", (self.robot.action_dim,), "rad+normalized"),
+                    state=StateSpec((StateField("joint_pos", (self.robot.action_dim,), self.robot.state_unit),
                         *((StateField('eef_state', (14,), 'm+rad+normalized'),) if self.eef_mode else ())))),
-                docs=self.docs + f"\nAction order: {', '.join(YAM_EEF_LABELS if self.eef_mode else self.robot.labels)}. Grippers: 0 closed, 1 open. "
-                    "Motion may be truncated to max_horizon; use the next measured state to replan."
+                docs=self.docs + f"\nAction order: {', '.join(YAM_EEF_LABELS if self.eef_mode else self.robot.labels)}. "
+                    + (f"Gripper: 0 closed, {self.robot.gripper_high:g} open. " if self.robot.name == 'so101'
+                       else "Grippers: 0 closed, 1 open. ")
+                    + "Motion may be truncated to max_horizon; use the next measured state to replan."
                     + (" Each arm's EE x/y/z is metres in its own base frame; yaw/pitch/roll "
                        "are radians relative to reset orientation. Verify eef_state after moving."
                        if self.eef_mode else ""),
@@ -265,17 +323,24 @@ class InspectAgentBackend:
         check_bounds(actions, self.action_low, self.action_high,
                      YAM_EEF_LABELS if self.eef_mode else self.robot.labels,
                      "agent actions exceed rig bounds")
-        previous = np.vstack((position, actions[:-1])) if not self.eef_mode else None
-        delta = actions[:, self.joint_indices] - previous[:, self.joint_indices] if previous is not None else None
-        exceeded = np.abs(delta) > self.max_step + 1e-7 if delta is not None else np.empty((0, 0), dtype=bool)
+        if self.eef_mode:
+            exceeded = np.empty((0, 0), dtype=bool)
+        else:
+            previous = np.vstack((position, actions[:-1]))
+            step_indices = (self.robot.joint_indices + self.robot.gripper_indices
+                            if self.robot.name == 'so101' else self.robot.joint_indices)
+            step_limits = self.action_max_step[list(step_indices)]
+            delta = actions[:, step_indices] - previous[:, step_indices]
+            exceeded = np.abs(delta) > step_limits + 1e-7
         if np.any(exceeded):
             details = '; '.join(
-                f'action_index={row} {self.robot.labels[self.joint_indices[j]]}: '
-                f'previous={previous[row, self.joint_indices[j]]:.6f}, '
-                f'target={actions[row, self.joint_indices[j]]:.6f}, '
-                f'delta={delta[row, j]:.6f}, limit={self.max_step[j]:.6f}'
+                f'action_index={row} {self.robot.labels[step_indices[j]]}: '
+                f'previous={previous[row, step_indices[j]]:.6f}, '
+                f'target={actions[row, step_indices[j]]:.6f}, '
+                f'delta={delta[row, j]:.6f}, limit={step_limits[j]:.6f}'
                 for row, j in zip(*np.nonzero(exceeded)))
-            error = "agent actions exceed per-step joint limits: " + details
+            kind = 'action' if self.robot.name == 'so101' else 'joint'
+            error = f"agent actions exceed per-step {kind} limits: " + details
             logging.getLogger(__name__).error('%s', error)
             raise ValueError(error)
         # Franka uses binary grippers; YAM preserves continuous openings.
@@ -285,6 +350,74 @@ class InspectAgentBackend:
             actions[:, self.gripper_indices] = 1 - actions[:, self.gripper_indices]
         self.last_step = observation.control_step
         self.last_actions = actions[:self.model.max_horizon].astype(np.float32)
+        return self.last_actions.copy()
+
+    def _infer_so101_eef(self, observation):
+        from inspect_robots.embodiment import EmbodimentInfo
+        from inspect_robots.scene import Scene
+        from inspect_robots.spaces import ActionSemantics, Box, CameraSpec, ObservationSpace, StateField, StateSpec
+        from inspect_robots.types import Observation
+
+        if not observation.instruction.strip() or observation.control_step <= self.last_step:
+            raise ValueError("instruction must be nonempty and control_step must advance")
+        joints = _state(observation, "joint_position", (5,))
+        gripper = _state(observation, "gripper_position", (1,))
+        eef = _state(observation, "eef_state", (7,))
+        quat = _state(observation, "eef_quat_wxyz", (4,))
+        if not 0 <= gripper[0] <= 100 or not 0 <= eef[6] <= 100 or abs(np.linalg.norm(quat) - 1) > .01:
+            raise ValueError("invalid SO101 EEF state")
+        raw = {item.sensor_id: item for item in observation.sensors}
+        images = {name: _rgb(raw.get(name), name) for name in self.sensors}
+        if not self.bound:
+            cameras = tuple(CameraSpec(name, img.shape[0], img.shape[1]) for name, img in images.items())
+            self.agent.bind(EmbodimentInfo(
+                name="so101_eef", control_hz=self.model.control_hz,
+                # Inspect's bind requires finite Box bounds. The Router EEF
+                # tool installed below does not use these placeholder bounds.
+                action_space=Box(shape=(7,), low=-np.ones(7), high=np.ones(7),
+                    semantics=ActionSemantics(control_mode="eef_delta_pose", rotation_repr="axis_angle",
+                        gripper="continuous", frame="base",
+                        dim_labels=("x", "y", "z", "rx", "ry", "rz", "gripper"),
+                        agent_eef_target=True, max_chunk_steps=self.model.max_horizon)),
+                observation_space=ObservationSpace(cameras=cameras,
+                    state=StateSpec((StateField("joint_pos", (6,), "degrees+0_100"),
+                        StateField("eef_state", (7,), "m+axis_angle_rad+gripper_0_100"),
+                        StateField("eef_quat_wxyz", (4,), "unit_quaternion")))),
+                docs=(self.docs + "\nSO101 EEF base-frame positions are metres; rotations are axis-angle "
+                    "radians; gripper is 0 closed to 100 open. The arm has five joints and cannot reach "
+                    "every six-dimensional pose. Use measured EEF state after each motion. "
+                    "Each motion uses at most the Router-assigned max_horizon steps."),
+            ))
+            from .router_eef_tool import align_router_eef_prompt, install_router_eef_tool
+            install_router_eef_tool(self.agent, self.model.max_horizon)
+            self.agent.reset(Scene(id=self.run_id, instruction=observation.instruction))
+            align_router_eef_prompt(self.agent)
+            self.bound = True
+        if self.hold_target is not None:
+            self.last_step = observation.control_step
+            return np.zeros((1, 7), dtype=np.float32)
+        obs = Observation(images=images,
+            state={"joint_pos": np.r_[joints, gripper], "eef_state": eef, "eef_quat_wxyz": quat},
+            instruction=observation.instruction, extra={"env_step": observation.control_step})
+        chunk = self.agent.act(obs)
+        if chunk.meta.get("request_stop") or any(action.meta.get("request_stop") for action in chunk.actions):
+            meta = next((a.meta for a in chunk.actions if a.meta.get("request_stop")), chunk.meta)
+            self.stop_reason = meta.get("stop_reason", "give_up")
+            if self.stop_reason not in {"done", "give_up"}:
+                raise ValueError("invalid agent stop reason")
+            self.stop_step = observation.control_step
+            self.stop_detail = str(meta.get("stop_detail", ""))
+            self.hold_target = np.zeros(7, dtype=np.float32)
+            self.last_step = observation.control_step
+            return self.hold_target[None, :].copy()
+        if chunk.control_hz is not None and chunk.control_hz != self.model.control_hz:
+            raise ValueError("agent returned a different control frequency")
+        actions = np.asarray([action.data for action in chunk.actions], dtype=np.float64)
+        if (actions.ndim != 2 or actions.shape[1] != 7 or not len(actions)
+                or len(actions) > self.model.max_horizon or not np.isfinite(actions).all()):
+            raise ValueError("agent returned invalid SO101 EEF trajectory")
+        self.last_step = observation.control_step
+        self.last_actions = actions.astype(np.float32)
         return self.last_actions.copy()
 
     def _hold(self, joints, control_step):

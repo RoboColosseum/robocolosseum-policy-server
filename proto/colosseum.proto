@@ -166,6 +166,9 @@ message LocalControl {
   optional string robot_type = 21;
   // Client -> Policy Server only. Never echo, persist, or send to Router.
   optional string api_key = 20;
+  // Policy Server -> Client: local execution contract; Router model remains joint_position.
+  optional string control_mode = 23;
+  optional uint32 internal_action_dim = 24;
   optional bool test = 19;
   string type = 1;
   uint32 protocol_version = 2;

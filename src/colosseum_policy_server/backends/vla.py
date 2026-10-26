@@ -13,7 +13,7 @@ def load_model_adapter(name, options):
     if name in {'molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam'}:
         from ..model_adapters.yam_vla import YAMVLAAdapter
         return YAMVLAAdapter(options)
-    if name in {'molmoact2_so101', 'pi05_so101', 'groot_so101', 'g05_so101'}:
+    if name in {'molmoact2_so101', 'pi05_so101', 'groot_so101', 'g05_so101', 'lingbot_so101'}:
         from ..model_adapters.so101_vla import SO101VLAAdapter
         return SO101VLAAdapter(options)
     if name in _ADAPTERS:

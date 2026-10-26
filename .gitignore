@@ -9,3 +9,6 @@ configs/local-runtime-yam-*.yaml
 agent-logs/
 local-policy-logs/
 local-receipts.jsonl
+
+# Inspect agent transcripts written at runtime
+agent-logs/

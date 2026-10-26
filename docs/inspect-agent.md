@@ -3,9 +3,10 @@
 `inspect_agent` runs Inspect Robots' LLM policy behind the existing binary
 Protobuf Local Protocol. DROID remains on the Robot Client. No robot SDK,
 local GPU, model weights, or model subprocess is needed on the Policy Server.
-Images, joint state, and instructions go to the selected cloud API and incur
-provider charges. This backend currently supports only 8-D `joint_position`
-(seven arm joints in radians plus a binary gripper).
+Images, state, and instructions go to the selected cloud API and incur
+provider charges. Franka and YAM retain joint-position control. SO101 may use
+seven-value EEF deltas internally while preserving its six-value public
+joint-position contract; see the [SO101 guide](so101.md).
 
 ## Install and start
 
@@ -16,10 +17,10 @@ uv sync --locked --extra agent --extra droid
 cp configs/local-runtime-agent.yaml.example configs/local-runtime.yaml
 ```
 
-The optional extra pins Inspect core and Agent to Git commit
-`d08442a9d1f43af4658c8d71e02d461e780286e1`. Agent 0.29.0 is not available on
-PyPI at implementation time. Both `uv` and `pip install -e '.[agent]'` use
-the pinned source. Existing installations without this extra do not import
+The optional extra pins Inspect core and Agent to the same Git commit,
+`22a4da62776575723c0d6285315fc32cdc0cddf5`, which includes the SO101 EEF
+agent semantics and Claude Code login. Both `uv` and `pip install -e '.[agent]'`
+use the pinned source. Existing installations without this extra do not import
 Inspect or install its HTTP dependencies.
 
 Fill in `joint_low`, `joint_high`, `joint_max_step` (seven numbers each),

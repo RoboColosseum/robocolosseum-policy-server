@@ -2,12 +2,16 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+import ctypes
+from dataclasses import dataclass, replace
 from importlib import metadata
 import ipaddress
 import json
+import os
 from pathlib import Path
+import signal
 import socket
+import sys
 import time
 import traceback
 from typing import Any, Mapping
@@ -61,7 +65,36 @@ class RuntimeConfig:
         return cls(host, port, backend.get("name", "auto"), dict(backend.get("options", {})), Path(str(raw.get("log_dir", "local-policy-logs"))), timeout, {model.name: model for model in models})
 
 
+_PR_SET_PDEATHSIG = 1
+# Resolved before any fork: the child may only make the prctl call itself.
+_libc = ctypes.CDLL(None, use_errno=True) if sys.platform == "linux" else None
+
+
+def _die_with_parent(parent: int):
+    """Return a preexec hook that kills the model service if this server dies.
+
+    The service runs in its own session, so neither Ctrl+C nor a closed terminal
+    reaches it, and a hard exit skips stop(). Without this an orphaned service
+    keeps its GPU memory and the next model fails to start.
+    """
+    def hook() -> None:
+        _libc.prctl(_PR_SET_PDEATHSIG, signal.SIGKILL)
+        if os.getppid() != parent:  # the server died before prctl took effect
+            os._exit(1)
+    return hook
+
+
+def _signal_group(process, sig: int) -> None:
+    # start_new_session made the launcher a group leader; this reaches its workers too.
+    try:
+        os.killpg(process.pid, sig)
+    except ProcessLookupError:
+        pass
+
+
 class LocalServiceSupervisor:
+    stop_grace_seconds = 10.0
+
     def __init__(self, config: RuntimeConfig): self.config, self.process, self.active, self.log = config, None, None, None
     @staticmethod
     async def _listening(endpoint: str) -> bool:
@@ -79,7 +112,8 @@ class LocalServiceSupervisor:
         if not model.launcher: return
         await self.stop(); self.config.log_dir.mkdir(parents=True, exist_ok=True)
         self.log = (self.config.log_dir / f"{model.name}-{time.strftime('%Y%m%d-%H%M%S')}.log").open("xb")
-        self.process = await asyncio.create_subprocess_exec(*model.launcher, stdout=self.log, stderr=asyncio.subprocess.STDOUT, start_new_session=True); self.active = model
+        preexec = _die_with_parent(os.getpid()) if _libc is not None else None
+        self.process = await asyncio.create_subprocess_exec(*model.launcher, stdout=self.log, stderr=asyncio.subprocess.STDOUT, start_new_session=True, preexec_fn=preexec); self.active = model
         deadline = time.monotonic() + self.config.start_timeout_seconds
         while time.monotonic() < deadline:
             if self.process.returncode is not None:
@@ -90,7 +124,15 @@ class LocalServiceSupervisor:
         raise RuntimeError("launcher did not make its loopback endpoint available before timeout")
     async def stop(self) -> None:
         process, self.process, self.active = self.process, None, None
-        if process is not None and process.returncode is None: process.terminate(); await process.wait()
+        if process is not None and process.returncode is None:
+            _signal_group(process, signal.SIGTERM)
+            try:
+                await asyncio.wait_for(process.wait(), self.stop_grace_seconds)
+            except asyncio.TimeoutError:
+                _signal_group(process, signal.SIGKILL)
+                await process.wait()
+            # Only right after reaping it: a long-dead group id may have been reused.
+            _signal_group(process, signal.SIGKILL)  # workers that outlived the launcher
         if self.log is not None: self.log.close(); self.log = None
 
 
@@ -160,9 +202,22 @@ class LocalPolicyRuntime:
             if requested_model.get("model_type", "vla") == "vla":
                 requested_model.pop("model_type", None)
                 requested_model.pop("name", None)
-            matches = [model for model in self.config.models.values() if model.public_spec() == requested_model]
-            if len(matches) != 1: raise ValueError("unregistered model")
-            model = matches[0]
+            if requested_model.get("model_type") == "llm":
+                # The Router owns the LLM rate. Keep every other public field
+                # exact, then carry its assigned rate into the agent session.
+                assigned_hz = requested_model.get("control_hz")
+                if type(assigned_hz) is not int or assigned_hz <= 0:
+                    raise ValueError("invalid assigned LLM control_hz")
+                identity = {key: value for key, value in requested_model.items() if key != "control_hz"}
+                matches = [model for model in self.config.models.values()
+                           if model.model_type == "llm" and
+                           {key: value for key, value in model.public_spec().items() if key != "control_hz"} == identity]
+            else:
+                matches = [model for model in self.config.models.values() if model.public_spec() == requested_model]
+            if len(matches) != 1:
+                print("requested:", requested_model, "\nlocal:", [m.public_spec() for m in self.config.models.values()], flush=True)
+                raise ValueError("unregistered model")
+            model = replace(matches[0], control_hz=assigned_hz) if requested_model.get("model_type") == "llm" else matches[0]
             local_eef = model.model_type == 'llm' and model.backend_options.get('control_mode') == 'eef_abs_pose'
             if local_eef and request.get('use_local_action_contract') is not True:
                 raise ValueError('EEF local action override requires Client use_local_action_contract: true')
@@ -186,7 +241,9 @@ class LocalPolicyRuntime:
                         return
                     ready = {"type":"ready", "run_id":run_id, "preparation_id":request.get("preparation_id", ""),
                              "model":dict(request["model"]), "loaded":not verification_only,
-                             "verification_only":verification_only}
+                             "verification_only":verification_only,
+                             "control_mode": getattr(self.backend, "control_mode", "joint_pos"),
+                             "internal_action_dim": getattr(self.backend, "internal_action_dim", None) or model.action_dim}
                     if local_eef:
                         ready['message'] = json.dumps({'effective_model': {
                             **dict(request['model']), 'action_space': 'eef_abs_pose'}})
@@ -197,6 +254,7 @@ class LocalPolicyRuntime:
                     end = getattr(self.backend, "end_session", None)
                     if end is not None:
                         await end()
+                    await self.supervisor.stop()
         except Exception: print(traceback.format_exc(), flush=True); await self._error(ws, run_id, "INVALID_REQUEST", "Invalid local policy request")
     async def _serve(self, ws, run_id: str, model: LocalModel) -> None:
         sequence = 1
@@ -252,6 +310,7 @@ class LocalPolicyRuntime:
                 await self._error(ws, run_id, "POLICY_STOPPED", f"Agent requested {exc.reason}; operator scoring is required")
                 return
             except Exception: print(traceback.format_exc(), flush=True); await self._error(ws, run_id, "INFERENCE_FAILED", "Local inference failed"); return
-            if actions.ndim != 2 or not 1 <= actions.shape[0] <= model.max_horizon or actions.shape[1] != model.action_dim or not np.isfinite(actions).all(): await self._error(ws, run_id, "INVALID_REQUEST", "Backend returned an invalid action array"); return
+            internal_dim = getattr(self.backend, "internal_action_dim", None) or model.action_dim
+            if actions.ndim != 2 or not 1 <= actions.shape[0] <= model.max_horizon or actions.shape[1] != internal_dim or not np.isfinite(actions).all(): await self._error(ws, run_id, "INVALID_REQUEST", "Backend returned an invalid action array"); return
             plan = pb.ActionPlan(request_sequence=sequence, plan_id=sequence, start_step=observation.control_step, valid_until_step=observation.control_step + len(actions) - 1, control_hz=model.control_hz, actions=pb.Tensor(shape=actions.shape, dtype=pb.FLOAT32, data=actions.tobytes()))
             await ws.send(pb.RelayFrame(protocol_version=1, type=pb.ACTION_PLAN, session_id=run_id, sequence=sequence, payload=plan.SerializeToString()).SerializeToString()); sequence += 1
