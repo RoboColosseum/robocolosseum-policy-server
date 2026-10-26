@@ -35,6 +35,7 @@ colosseum-policy-test-backend = "colosseum_policy_server.local_verify:main"
 colosseum-policy-demo = "colosseum_policy_server.cli:main"
 colosseum-policy-local = "colosseum_policy_server.local_server:main"
 colosseum-policy-model = "colosseum_policy_server.model_service:main"
+colosseum-rover-sdk-bridge = "colosseum_policy_server.rover_sdk_bridge:main"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -35,3 +35,17 @@ def test_observation_state_exposes_standard_policy_inputs():
     np.testing.assert_array_equal(observation.state.head_image, rgb)
     assert observation.state.left_image is None
     assert observation.state.right_image is None
+
+
+def test_rover_state_helpers():
+    import numpy as np
+    from colosseum_policy_server.sdk import ImageFrame, Observation
+    front = ImageFrame("front_image", "RAW_RGB", 0, 2, 1, bytes(6))
+    goal = ImageFrame("goal_image", "RAW_RGB", 0, 2, 1, bytes(6))
+    observation = Observation(session_id="s", sequence=1, deadline_ms=0, robot_time_ns=0, control_step=0, instruction="go",
+                              raw_state={"navigation_state": np.arange(9, dtype=np.float64), "goal_gps": np.array([1.0, 2.0])},
+                              images=(front, goal), _received_monotonic_ns=0)
+    assert observation.state.front_image.shape == (1, 2, 3) and observation.state.rear_image is None
+    assert observation.state.goal_image.shape == (1, 2, 3)
+    np.testing.assert_array_equal(observation.state.navigation, np.arange(9))
+    np.testing.assert_array_equal(observation.state.goal_gps, [1.0, 2.0])

@@ -59,6 +59,9 @@ class ObservationState:
         "left_image": ("left_image", "camera.left", "camera.left_image"),
         "right_image": ("right_image", "camera.right", "camera.right_image"),
         "head_image": ("head_image", "camera.head", "camera.head_image"),
+        "front_image": ("front_image", "camera.front", "camera.front_image"),
+        "rear_image": ("rear_image", "camera.rear", "camera.rear_image"),
+        "goal_image": ("goal_image",),
     }
 
     def __init__(self, observation: "Observation") -> None:
@@ -97,6 +100,28 @@ class ObservationState:
     @property
     def head_image(self) -> np.ndarray | None:
         return self._image("head_image")
+
+    # Earth Rover Mini+: cameras, the navigation state vector and the goal.
+    @property
+    def front_image(self) -> np.ndarray | None:
+        return self._image("front_image")
+
+    @property
+    def rear_image(self) -> np.ndarray | None:
+        return self._image("rear_image")
+
+    @property
+    def goal_image(self) -> np.ndarray | None:
+        return self._image("goal_image")
+
+    @property
+    def navigation(self) -> np.ndarray | None:
+        """``[latitude, longitude, heading_deg, speed, battery, rpm_1..rpm_4]`` as float64."""
+        return self._state("navigation_state")
+
+    @property
+    def goal_gps(self) -> np.ndarray | None:
+        return self._state("goal_gps")
 
 
 @dataclass(frozen=True)
@@ -175,23 +200,41 @@ class AsyncColosseumPolicySDK:
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> "AsyncColosseumPolicySDK":
-        """Create an SDK from a YAML file containing only ``url`` and ``token``."""
+        """Create an SDK from a YAML file with ``url`` and ``token``.
+
+        Optional keys ``action_spaces`` (list of names), ``control_hz`` and
+        ``max_horizon`` override the manipulation defaults, e.g. for a rover policy.
+        """
 
         config_path = Path(path)
         with config_path.open("r", encoding="utf-8") as config_file:
             config = yaml.safe_load(config_file)
         if not isinstance(config, dict):
             raise ValueError("SDK config must be a YAML mapping")
-        expected = {"url", "token"}
-        missing = expected - config.keys()
-        unknown = config.keys() - expected
+        required = {"url", "token"}
+        optional = {"action_spaces", "control_hz", "max_horizon"}
+        missing = required - config.keys()
+        unknown = config.keys() - required - optional
         if missing:
             raise ValueError(f"SDK config is missing: {', '.join(sorted(missing))}")
         if unknown:
             raise ValueError(f"SDK config contains unsupported keys: {', '.join(sorted(unknown))}")
         if not isinstance(config["url"], str) or not isinstance(config["token"], str):
             raise ValueError("SDK config url and token must be strings")
-        return cls(router_url=config["url"], token=config["token"])
+        options = {}
+        if "action_spaces" in config:
+            spaces = config["action_spaces"]
+            if (not isinstance(spaces, list) or not spaces
+                    or any(not isinstance(name, str) or not name for name in spaces)):
+                raise ValueError("SDK config action_spaces must be a non-empty list of names")
+            options["action_spaces"] = tuple(spaces)
+        for key in ("control_hz", "max_horizon"):
+            if key in config:
+                value = config[key]
+                if type(value) is not int or value <= 0:
+                    raise ValueError(f"SDK config {key} must be a positive integer")
+                options[key] = value
+        return cls(router_url=config["url"], token=config["token"], **options)
 
     @staticmethod
     def _frame(
@@ -264,8 +307,13 @@ class AsyncColosseumPolicySDK:
         start_step: int | None = None,
         valid_until_step: int | None = None,
         control_hz: int | None = None,
+        done: bool = False,
     ) -> None:
-        """Send an action chunk correlated with an observation returned by ``get_obs``."""
+        """Send an action chunk correlated with an observation returned by ``get_obs``.
+
+        ``done=True`` declares the task complete (navigation policies that reached the
+        goal); the chunk must then be all zeros so the robot stops.
+        """
 
         source = observation or self._last_observation
         if source is None:
@@ -299,6 +347,10 @@ class AsyncColosseumPolicySDK:
                 )
         if not np.issubdtype(chunk.dtype, np.number) or not np.all(np.isfinite(chunk)):
             raise ValueError("actions must contain finite numeric values")
+        if not isinstance(done, bool):
+            raise ValueError("done must be a boolean")
+        if done and np.any(chunk != 0):
+            raise ValueError("done requires an all-zero action chunk")
         chunk = np.ascontiguousarray(chunk, dtype=np.float32)
         first_step = source.control_step if start_step is None else start_step
         final_step = first_step + len(chunk) - 1 if valid_until_step is None else valid_until_step
@@ -316,6 +368,7 @@ class AsyncColosseumPolicySDK:
             valid_until_step=final_step,
             control_hz=selected_control_hz,
             actions=tensor_from_numpy(chunk),
+            done=done,
         )
         await self._send(
             self._frame(

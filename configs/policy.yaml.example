@@ -1,2 +1,6 @@
 url: wss://router.example.com:8443
 token: pol_replace_with_token_from_router_ui
+# Navigation policies for the Earth Rover Mini+ declare the rover contract instead of the manipulation defaults:
+# action_spaces: [base_velocity]
+# control_hz: 10
+# max_horizon: 10
