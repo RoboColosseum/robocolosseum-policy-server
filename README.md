@@ -1,7 +1,8 @@
-# Colosseum Policy Server
+# RoboColosseum Policy Server
 
-Serve your models for robot task evaluation on
-[Robo Colosseum](https://frodobots-org.github.io/robo-colosseum/).
+Serve policy inference for the [RoboColosseum](https://robocolosseum.ai/)
+Open Track. The Policy Server receives robot observations, runs inference,
+and returns actions for the Client to execute.
 
 ## Installation
 
