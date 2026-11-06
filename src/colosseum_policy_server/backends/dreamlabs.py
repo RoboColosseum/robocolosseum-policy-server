@@ -5,9 +5,7 @@ YAM. The model's rows are played at PLAN_HZ, the rate Dream Labs' own YAM statio
 rate: each call returns the targets for its next loop steps, interpolated between the rows due then. The dream client
 keeps the model's frame window (9 frames at 5 fps) and fetches the next action chunk in the background while the arms
 play the current one, so a call normally returns from the installed chunk and waits on the network only when the next
-chunk has not arrived yet. One trial is one model session: start_session() opens it and end_session() closes it. The
-trial's first call holds the arms still for about 7.5 s while it asks the model again, so the first rows the arms run
-already follow the plan of the model's server-side task planner, whose first plan takes 3.5 to 6.5 s.
+chunk has not arrived yet. One trial is one model session: start_session() opens it and end_session() closes it.
 
 The API key is read by the dream client itself, from `DREAM_API_KEY` or `~/.dreamlabs/credentials`.
 """
@@ -36,11 +34,7 @@ CAMERAS = {"head_image": "top", "left_image": "left", "right_image": "right"}
 # next chunk is asked for as each lands, at most once per WARMUP_GAP_S: the API allows one request per 0.7 s.
 WARMUP_REPLIES = 5
 WARMUP_GAP_S = 1.0
-# The task planner's first plan lands 3.5 to 6.5 s into a session and no reply says when, so a trial's first call
-# asks HOLD_ASKS more times, HOLD_PERIOD_S apart, the arms still, and plays the reply asked for 7.2 s after the first.
-HOLD_ASKS = 3
-HOLD_PERIOD_S = 2.4
-# Tells the model it drives a YAM and answers joint targets; grippers are 0 closed to 1 open, as the Client's.
+# Fixed by the model's YAM wire, not deployment settings: a YAM, joint targets, grippers 0 closed to 1 open.
 YAM = {"robot.arm": "yam", "robot.exec_head": "joint", "robot.max_joint_vel_rad_s": 0.0, "robot.gripper_open": 1.0}
 
 
@@ -110,8 +104,6 @@ class DreamLabsBackend:
             self.playing_s += now - self.clock_at
         self._collect()
         self.client.set_observation(*self._wire(observation), timestamp=now)
-        if self.replies == 0 and self.refill is None:
-            await self._hold()
         warming = (self.replies < WARMUP_REPLIES and self.client.mode == "sync"
                    and now - self.observed_at >= WARMUP_GAP_S)
         due = self.chunk is None or warming
@@ -158,20 +150,6 @@ class DreamLabsBackend:
                  "state.arm_l.joint_pos": joints[:6].tolist(), "state.arm_l.gripper_pos": grippers[:1].tolist(),
                  "state.arm_r.joint_pos": joints[6:].tolist(), "state.arm_r.gripper_pos": grippers[1:].tolist()}
         return frames, state
-
-    async def _hold(self) -> None:
-        """Ask the model HOLD_ASKS more times with the first observation, HOLD_PERIOD_S apart; the arms stay still."""
-        started = time.monotonic()
-        for _ in range(HOLD_ASKS):
-            self._start_refill(time.monotonic())
-            await asyncio.wait({self.refill})
-            self.refill.result()  # this reply is dropped, but a failed call still raises
-            self.refill = None
-            self.replies += 1
-            await asyncio.sleep(max(0.0, self.observed_at + HOLD_PERIOD_S - time.monotonic()))
-        self._start_refill(time.monotonic())
-        await asyncio.wait({self.refill})
-        print(f"dreamlabs: held the first chunk {time.monotonic() - started:.1f} s for the planner", flush=True)
 
     def _start_refill(self, now: float) -> None:
         """Request the next chunk in the background for the latest observation."""
