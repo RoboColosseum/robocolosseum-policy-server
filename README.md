@@ -91,7 +91,7 @@ export DREAM_API_KEY=<your key>  # or put it in ~/.dreamlabs/credentials
 .venv/bin/colosseum-policy-local --config configs/local-runtime-yam-dreamlabs.yaml.example
 ```
 
-The `dreamlabs` backend plays the model's plan at 20 rows a second, the rate Dream Labs' YAM stations play it at,
+The `dreamlabs` backend plays the model's plan at 20 Hz, the rate Dream Labs' YAM stations play it at,
 interpolating between rows for the Client's 30 Hz steps. It keeps the model's frame window and fetches the next action
 chunk while the arms play the current one, so each inference call returns 3 targets (0.1 s at 30 Hz), normally from a
 local buffer. A trial's first call holds the arms still for under 8 s, until the model's task planner has a plan;
