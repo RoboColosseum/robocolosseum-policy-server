@@ -1,0 +1,32 @@
+# Colosseum Policy Server: SO-101 VLAs served remotely from Hopper over Tailscale.
+# Each endpoint is a local relay (policy_server_relay.py) to colosseum-so101 on the tailnet.
+# VLAs are matched to the Router's assignment by url + revision + action contract (not name).
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+start_timeout_seconds: 600
+backend:
+  name: vla
+  options:
+    external_sensor: head_image
+    wrist_sensor: left_image
+    http_timeout_seconds: 30
+models:
+  - name: molmoact2-so101
+    url: https://huggingface.co/allenai/MolmoAct2-SO100_101
+    revision: "152569fe57914d97be91055800035f54e250d009"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 30
+    endpoint: http://127.0.0.1:9201   # relay -> colosseum-so101:9101
+    backend_options: {robot_type: so101, adapter: molmoact2_so101, num_steps: 10}
+  - name: groot-n17-so101
+    url: https://huggingface.co/hqfang/groot-so100_101
+    revision: "f5e17af8948a647e4c23186a27927bf73d6d784e"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 40
+    endpoint: http://127.0.0.1:9202   # relay -> colosseum-so101:9102
+    backend_options: {robot_type: so101, adapter: groot_so101}
