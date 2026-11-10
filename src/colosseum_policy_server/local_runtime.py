@@ -244,9 +244,15 @@ class LocalPolicyRuntime:
                              "verification_only":verification_only,
                              "control_mode": getattr(self.backend, "control_mode", "joint_pos"),
                              "internal_action_dim": getattr(self.backend, "internal_action_dim", None) or model.action_dim}
+                    extra_message = {}
                     if local_eef:
-                        ready['message'] = json.dumps({'effective_model': {
-                            **dict(request['model']), 'action_space': 'eef_abs_pose'}})
+                        extra_message['effective_model'] = {
+                            **dict(request['model']), 'action_space': 'eef_abs_pose'}
+                    extras = list(getattr(self.backend, "observation_extras", ()) or ())
+                    if extras and not verification_only:
+                        extra_message['observation_extras'] = extras
+                    if extra_message:
+                        ready['message'] = json.dumps(extra_message)
                     await ws.send(encode_control(ready))
                     self._progress('model_ready', run_id, model)
                     await self._serve(ws, run_id, model)
