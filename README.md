@@ -111,12 +111,21 @@ uv sync --extra demo
 cp configs/policy.yaml.example configs/policy.yaml
 ```
 
-Edit it with your Router endpoint and **Policy Server token** from the Router admin:
+Edit it with your Router endpoint, **Policy Server token** and **policy ID** from the
+Router admin:
 
 ```yaml
 url: wss://router.example.com:8443
 token: pol_replace_with_token_from_router_ui
+policy_id: your-policy-id   # must match your deployment, or trials are never matched to you
+robot: yam                  # yam | so101 | franka | earth_rover_mini_plus
+reconnect: true
 ```
+
+`robot` fills `action_spaces`, `control_hz` and `max_horizon` for that robot (explicit keys
+override it). `reconnect: true` re-registers after a Router restart or network drop.
+`ping_interval` / `ping_timeout` (seconds, default 20 / 60) set the WebSocket keepalive;
+raise `ping_timeout` if your uplink is slow.
 
 Start the SDK example:
 
@@ -148,7 +157,7 @@ Install your model's dependencies in the same Python environment. Create
 `serve_policy.py` in the repository root using this template:
 
 ```python
-from colosseum_policy_server import ColosseumPolicySDK
+from colosseum_policy_server import ColosseumPolicySDK, StaleObservationError
 from your_policy import load_model  # Replace with your own model loader.
 
 
@@ -160,7 +169,10 @@ def main():
         while True:
             obs = sdk.get_obs()
             actions = model.infer(obs)
-            sdk.send_action(actions, observation=obs)
+            try:
+                sdk.send_action(actions, observation=obs)
+            except StaleObservationError:
+                pass  # The trial ended during inference; wait for the next one.
 
 
 if __name__ == "__main__":
@@ -187,10 +199,29 @@ obs.state.gripper      # Gripper state.
 For JPEG/PNG observations, install the image-decoding dependency with
 `uv sync --extra demo`.
 
-The YAML-based SDK defaults to `joint_position`, 15 Hz, and a maximum 16-step
-action horizon. These settings must suit your model and the Client. To customize
-them, construct `ColosseumPolicySDK` directly with `router_url`, `token`,
-`action_spaces`, `control_hz`, and `max_horizon` instead of using `from_yaml`.
+Without `robot`, the SDK defaults to `joint_position`, 15 Hz, and a maximum 16-step
+action horizon. These settings must suit your model and the Client. The same options
+are constructor arguments of `ColosseumPolicySDK` (`router_url`, `token`, `policy_id`,
+`action_spaces`, `control_hz`, `max_horizon`, `ping_interval`, `ping_timeout`, `reconnect`).
+
+Images arrive as `RAW_RGB`, `JPEG` or `PNG` (Clients can send JPEG to save uplink
+bandwidth); `obs.state.*_image` and `ImageFrame.as_rgb()` decode all three.
+
+### Serve a local-runtime model remotely
+
+Models that already run under `colosseum-policy-local` (G05, pi05, GR00T, ...) can serve
+remote evaluations without writing SDK code. The runner reads the same runtime YAML,
+loads the model once, dials out to the Router and re-registers after drops:
+
+```bash
+export COLOSSEUM_POLICY_TOKEN=pol_replace_with_token_from_router_ui
+uv run colosseum-policy-remote --config configs/local-runtime.yaml --model g05-yam \
+  --router wss://router.example.com --policy-id your-policy-id
+```
+
+It prints one JSON line per action chunk (`infer_s` is the model time). Inference
+errors end the trial immediately with `INFERENCE_FAILED` instead of a Client timeout.
+VLA models only; LLM agents need per-trial credentials and stay on the local protocol.
 
 After matching, `sdk.robot` exposes the Client's hardware specification and
 `sdk.selected_action_space` identifies the selected action space. The SDK checks

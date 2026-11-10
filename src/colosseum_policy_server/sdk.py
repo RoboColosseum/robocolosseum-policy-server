@@ -5,7 +5,7 @@ import contextlib
 import logging
 import ssl
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -157,6 +157,8 @@ class Observation:
     raw_state: Mapping[str, np.ndarray]
     images: tuple[ImageFrame, ...]
     _received_monotonic_ns: int
+    # The wire message, for runners that hand it to a local-runtime backend unchanged.
+    message: "pb.Observation | None" = field(default=None, repr=False, compare=False)
 
     def image(self, image_id: str) -> ImageFrame | None:
         return next((image for image in self.images if image.image_id == image_id), None)
@@ -443,6 +445,15 @@ class AsyncColosseumPolicySDK:
         )
         self._sent_sequences.add(source.sequence)
 
+    async def send_error(self, code: str, message: str, *, observation: Observation | None = None) -> None:
+        """End the current trial with an error the Client reports, instead of letting it time out."""
+        source = observation or self._last_observation
+        if self.connection is None or not self.session_id or (source is not None and source.session_id != self.session_id):
+            return  # No active trial to report to.
+        error = pb.Error(code=code, message=message, retryable=False)
+        await self._send(self._frame(pb.ERROR, error, session_id=self.session_id,
+                                     sequence=source.sequence if source is not None else 0))
+
     async def close(self) -> None:
         self._closing = True
         receiver = self._receiver_task
@@ -562,6 +573,7 @@ class AsyncColosseumPolicySDK:
                     for sensor in message.sensors
                 ),
                 _received_monotonic_ns=time.monotonic_ns(),
+                message=message,
             )
             self._put_latest(observation)
         elif frame.type == pb.RESET:
