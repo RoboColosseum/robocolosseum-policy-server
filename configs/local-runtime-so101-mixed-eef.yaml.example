@@ -17,7 +17,8 @@ backend:
       robot_notes: "Describe this rig's camera views, workspace and EEF frame before use."
       effort: low
       images: always
-      # If Claude Code is installed outside PATH, set its absolute CLI path:
+      # If Claude Code is installed outside PATH, set its absolute CLI path.
+      # claude-fable-5-2 through the Claude Code login needs Claude Code 2.1.290 or newer.
       # claude_command: /absolute/path/to/claude
 models:
   # Identity, revision and action contract must match the Router registration.
@@ -102,6 +103,16 @@ models:
     endpoint: inprocess://inspect-agent
     backend_options: {robot_type: so101, api_base_url: https://api.x.ai/v1}
   - name: claude-opus-5-5
+    model_type: llm
+    url: https://api.anthropic.com/v1
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 10
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options: {robot_type: so101, api_base_url: https://api.anthropic.com/v1}
+  - name: claude-fable-5-2
     model_type: llm
     url: https://api.anthropic.com/v1
     revision: rig-v1
