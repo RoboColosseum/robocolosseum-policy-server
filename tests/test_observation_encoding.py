@@ -1,6 +1,7 @@
-import cv2
 import numpy as np
 import pytest
+
+cv2 = pytest.importorskip("cv2")  # JPEG/PNG decoding is the optional demo extra
 
 from colosseum_policy_server import colosseum_pb2 as pb
 from colosseum_policy_server.model_adapters.observation import _rgb
