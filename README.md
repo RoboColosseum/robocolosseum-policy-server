@@ -98,7 +98,8 @@ existing Router registration, and holding position after an agent stop request.
 ## Host a Remote Policy Server
 
 Host your models on your own inference machine so evaluators can use your compute
-resources and models to run evaluations. The
+resources and models to run evaluations. The full guide (robot contracts, latency
+requirements, protocol reference, onboarding) is [Remote Inference Guide](docs/remote-inference.md). The
 [Robot Client](https://github.com/frodobots-org/colosseum-client) exchanges
 observations and actions with your Policy Server through the Router.
 
@@ -117,7 +118,7 @@ Router admin:
 ```yaml
 url: wss://router.example.com:8443
 token: pol_replace_with_token_from_router_ui
-policy_id: your-policy-id   # must match your deployment, or trials are never matched to you
+policy_id: your-policy-id   # deployment policy ID; when omitted, the Router uses the token name
 robot: yam                  # yam | so101 | franka | earth_rover_mini_plus
 reconnect: true
 ```

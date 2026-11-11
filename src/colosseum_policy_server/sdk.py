@@ -233,8 +233,9 @@ class AsyncColosseumPolicySDK:
     def from_yaml(cls, path: str | Path) -> "AsyncColosseumPolicySDK":
         """Create an SDK from a YAML file with ``url`` and ``token``.
 
-        ``policy_id`` must match the deployment registered on the Router, or evaluation
-        trials are never matched to this server. ``robot`` (one of ``ROBOT_PRESETS``)
+        ``policy_id`` names the deployment registered on the Router; when empty, the
+        Router falls back to the token name, which matches only if the token was
+        named after the deployment. ``robot`` (one of ``ROBOT_PRESETS``)
         fills ``action_spaces``/``control_hz``/``max_horizon`` for that robot; explicit
         keys override it. Also optional: ``policy_revision``, ``ping_interval``,
         ``ping_timeout`` (seconds) and ``reconnect`` (bool).

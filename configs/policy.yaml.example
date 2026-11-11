@@ -1,6 +1,7 @@
 url: wss://router.example.com:8443
 token: pol_replace_with_token_from_router_ui
-# Must match the policy ID of your deployment on the Router; otherwise evaluation trials are never matched.
+# Policy ID of your deployment on the Router. When omitted, the Router uses the token name instead, so
+# trials match only if the token was named after the deployment.
 policy_id: replace-with-your-policy-id
 # Robot contract preset: yam | so101 | franka | earth_rover_mini_plus. Sets action_spaces, control_hz and
 # max_horizon; explicit keys below override it.
