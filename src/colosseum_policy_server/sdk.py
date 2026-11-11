@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 import ssl
 import time
 from dataclasses import dataclass
@@ -17,6 +18,16 @@ from . import colosseum_pb2 as pb
 from .tensors import tensor_from_numpy, tensor_to_numpy
 
 PROTOCOL_VERSION = 1
+LOG = logging.getLogger(__name__)
+
+# Action contract each robot's Client announces. ``robot: <type>`` in the SDK config
+# fills action_spaces and control_hz from here; max_horizon is the default chunk cap.
+ROBOT_PRESETS: dict[str, dict] = {
+    "yam": {"action_spaces": ("joint_position",), "control_hz": 30, "max_horizon": 50},
+    "so101": {"action_spaces": ("joint_position",), "control_hz": 30, "max_horizon": 50},
+    "franka": {"action_spaces": ("joint_position",), "control_hz": 15, "max_horizon": 16},
+    "earth_rover_mini_plus": {"action_spaces": ("base_velocity",), "control_hz": 10, "max_horizon": 10},
+}
 
 
 @dataclass(frozen=True)
@@ -159,6 +170,13 @@ class SDKConnectionError(RuntimeError):
     pass
 
 
+class StaleObservationError(SDKConnectionError):
+    """The observation's session ended (trial over or Router reconnect) before the action was sent.
+
+    Not a fault: skip this action and call ``get_obs()`` for the next trial.
+    """
+
+
 class AsyncColosseumPolicySDK:
     """Pull-based SDK for running inference against the latest robot observation."""
 
@@ -173,6 +191,9 @@ class AsyncColosseumPolicySDK:
         action_spaces: tuple[str, ...] = ("joint_position",),
         control_hz: int = 15,
         max_horizon: int = 16,
+        ping_interval: float = 20,
+        ping_timeout: float = 60,
+        reconnect: bool = False,
     ) -> None:
         if not router_url.startswith(("wss://", "ws://")):
             raise ValueError("router_url must use wss:// or ws://")
@@ -180,6 +201,14 @@ class AsyncColosseumPolicySDK:
             raise ValueError("token is required")
         if control_hz <= 0 or max_horizon <= 0:
             raise ValueError("control_hz and max_horizon must be positive")
+        if ping_interval <= 0 or ping_timeout <= 0:
+            raise ValueError("ping_interval and ping_timeout must be positive")
+        self.ping_interval = ping_interval
+        self.ping_timeout = ping_timeout
+        # Keep the registration alive across Router restarts and network drops.
+        self.reconnect = reconnect
+        self._ssl_context: ssl.SSLContext | None = None
+        self._closing = False
         self.router_url = router_url
         self.token = token
         self.server_id = server_id
@@ -202,8 +231,11 @@ class AsyncColosseumPolicySDK:
     def from_yaml(cls, path: str | Path) -> "AsyncColosseumPolicySDK":
         """Create an SDK from a YAML file with ``url`` and ``token``.
 
-        Optional keys ``action_spaces`` (list of names), ``control_hz`` and
-        ``max_horizon`` override the manipulation defaults, e.g. for a rover policy.
+        ``policy_id`` must match the deployment registered on the Router, or evaluation
+        trials are never matched to this server. ``robot`` (one of ``ROBOT_PRESETS``)
+        fills ``action_spaces``/``control_hz``/``max_horizon`` for that robot; explicit
+        keys override it. Also optional: ``policy_revision``, ``ping_interval``,
+        ``ping_timeout`` (seconds) and ``reconnect`` (bool).
         """
 
         config_path = Path(path)
@@ -212,7 +244,8 @@ class AsyncColosseumPolicySDK:
         if not isinstance(config, dict):
             raise ValueError("SDK config must be a YAML mapping")
         required = {"url", "token"}
-        optional = {"action_spaces", "control_hz", "max_horizon"}
+        optional = {"action_spaces", "control_hz", "max_horizon", "policy_id", "policy_revision",
+                    "robot", "ping_interval", "ping_timeout", "reconnect"}
         missing = required - config.keys()
         unknown = config.keys() - required - optional
         if missing:
@@ -222,6 +255,25 @@ class AsyncColosseumPolicySDK:
         if not isinstance(config["url"], str) or not isinstance(config["token"], str):
             raise ValueError("SDK config url and token must be strings")
         options = {}
+        if "robot" in config:
+            if config["robot"] not in ROBOT_PRESETS:
+                raise ValueError(f"SDK config robot must be one of: {', '.join(sorted(ROBOT_PRESETS))}")
+            options.update(ROBOT_PRESETS[config["robot"]])
+        for key in ("policy_id", "policy_revision"):
+            if key in config:
+                if not isinstance(config[key], str):
+                    raise ValueError(f"SDK config {key} must be a string")
+                options[key] = config[key]
+        for key in ("ping_interval", "ping_timeout"):
+            if key in config:
+                value = config[key]
+                if type(value) not in (int, float) or value <= 0:
+                    raise ValueError(f"SDK config {key} must be a positive number of seconds")
+                options[key] = value
+        if "reconnect" in config:
+            if not isinstance(config["reconnect"], bool):
+                raise ValueError("SDK config reconnect must be true or false")
+            options["reconnect"] = config["reconnect"]
         if "action_spaces" in config:
             spaces = config["action_spaces"]
             if (not isinstance(spaces, list) or not spaces
@@ -256,29 +308,38 @@ class AsyncColosseumPolicySDK:
     async def connect(self, *, ssl_context: ssl.SSLContext | None = None) -> None:
         if self.connection is not None:
             raise RuntimeError("SDK is already connected")
+        self._ssl_context = ssl_context
+        self._closing = False
+        try:
+            await self._register()
+        except BaseException:
+            await self._drop_connection()
+            raise
+        self._receiver_task = asyncio.create_task(self._receiver(), name="colosseum-policy-receiver")
+
+    async def _register(self) -> None:
         options = {
             "additional_headers": {"Authorization": f"Bearer {self.token}"},
             "compression": None,
             "max_size": 32 * 1024 * 1024,
-            "ping_interval": 10,
-            "ping_timeout": 10,
+            "ping_interval": self.ping_interval,
+            "ping_timeout": self.ping_timeout,
         }
-        if ssl_context is not None:
-            options["ssl"] = ssl_context
+        if self._ssl_context is not None:
+            options["ssl"] = self._ssl_context
         self.connection = await ws_connect(self.router_url, **options)
         hello = pb.Hello(role=pb.POLICY_SERVER, peer_id=self.server_id, policy_id=self.policy_id)
         await self._send(self._frame(pb.HELLO, hello))
         registered = await self._receive()
         if registered.type == pb.ERROR:
             error = pb.Error.FromString(registered.payload)
-            await self.close()
+            await self._drop_connection()
             raise SDKConnectionError(f"{error.code}: {error.message}")
         if registered.type != pb.REGISTERED:
-            await self.close()
+            await self._drop_connection()
             raise SDKConnectionError("router did not register policy server")
         registration = pb.Registered.FromString(registered.payload)
         self.server_id = registration.peer_id
-        self._receiver_task = asyncio.create_task(self._receiver(), name="colosseum-policy-receiver")
 
     async def get_obs(self, *, timeout: float | None = None) -> Observation:
         """Return the latest unclaimed observation, dropping older queued observations."""
@@ -318,8 +379,10 @@ class AsyncColosseumPolicySDK:
         source = observation or self._last_observation
         if source is None:
             raise RuntimeError("get_obs() must be called before send_action()")
-        if self.connection is None or not self.session_id or source.session_id != self.session_id:
-            raise SDKConnectionError("observation does not belong to the active session")
+        if self.connection is None:
+            raise SDKConnectionError("SDK is not connected")
+        if not self.session_id or source.session_id != self.session_id:
+            raise StaleObservationError("observation does not belong to the active session")
         if source.sequence in self._sent_sequences:
             raise ValueError(f"an action was already sent for observation sequence {source.sequence}")
         if source.deadline_ms:
@@ -381,6 +444,7 @@ class AsyncColosseumPolicySDK:
         self._sent_sequences.add(source.sequence)
 
     async def close(self) -> None:
+        self._closing = True
         receiver = self._receiver_task
         self._receiver_task = None
         if receiver is not None:
@@ -394,20 +458,55 @@ class AsyncColosseumPolicySDK:
         self._clear_session()
 
     async def _receiver(self) -> None:
-        try:
-            assert self.connection is not None
-            async for raw in self.connection:
-                if isinstance(raw, str):
-                    continue
-                frame = pb.RelayFrame.FromString(raw)
-                await self._handle_frame(frame)
-            self._put_latest(SDKConnectionError("router connection closed"))
-        except ConnectionClosed as exc:
-            self._put_latest(SDKConnectionError(f"router connection closed: {exc}"))
-        except asyncio.CancelledError:
-            raise
-        except BaseException as exc:
-            self._put_latest(exc)
+        while True:
+            try:
+                assert self.connection is not None
+                async for raw in self.connection:
+                    if isinstance(raw, str):
+                        continue
+                    frame = pb.RelayFrame.FromString(raw)
+                    await self._handle_frame(frame)
+                error: BaseException = SDKConnectionError("router connection closed")
+            except ConnectionClosed as exc:
+                error = SDKConnectionError(f"router connection closed: {exc}")
+            except asyncio.CancelledError:
+                raise
+            except BaseException as exc:
+                self._put_latest(exc)
+                return
+            if not self.reconnect or self._closing:
+                self._put_latest(error)
+                return
+            try:
+                await self._reconnect(error)
+            except SDKConnectionError:
+                return
+
+    async def _drop_connection(self) -> None:
+        connection, self.connection = self.connection, None
+        if connection is not None:
+            with contextlib.suppress(Exception):
+                await connection.close()
+
+    async def _reconnect(self, error: BaseException) -> None:
+        # A trial in progress cannot resume on a new connection; the Client sees it fail.
+        self._clear_session()
+        delay = 1.0
+        while not self._closing:
+            LOG.warning("%s; reconnecting in %.0fs", error, delay)
+            await asyncio.sleep(delay)
+            await self._drop_connection()
+            try:
+                await self._register()
+            except SDKConnectionError as exc:
+                self._put_latest(exc)  # Router rejected the token: retrying cannot help.
+                raise
+            except (OSError, ConnectionClosed, asyncio.TimeoutError) as exc:
+                await self._drop_connection()
+                error, delay = exc, min(delay * 2, 30.0)
+                continue
+            LOG.warning("reconnected to router as %s", self.server_id)
+            return
 
     async def _handle_frame(self, frame: pb.RelayFrame) -> None:
         if frame.protocol_version != PROTOCOL_VERSION:
