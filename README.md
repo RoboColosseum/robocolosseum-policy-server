@@ -128,6 +128,13 @@ compatibility and mixed VLA/LLM setup. See
 [Inspect Agent setup](docs/inspect-agent.md) for provider configuration,
 existing Router registration, and holding position after an agent stop request.
 
+On SO-101, models named `<llm>-capx` (Router: `claude-opus-5-5-capx`,
+`gpt-6-astra-capx`, `grok-4.7-capx`) instead run Inspect Robots' CaP-X code-as-policy,
+where the LLM writes Python that calls SAM3 segmentation and IK.
+Install `--extra capx` instead of `--extra agent` and add a `capx` section and
+CaP-X models to your SO-101 runtime configuration; see
+[Inspect CaP-X setup](docs/inspect-capx.md).
+
 ## Host a Remote Policy Server
 
 Host your models on your own inference machine so evaluators can use your compute
