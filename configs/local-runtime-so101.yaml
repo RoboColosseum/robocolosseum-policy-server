@@ -1,0 +1,66 @@
+# Colosseum Policy Server: the five SO-101 VLAs, co-hosted on one Hopper GPU and reached over Tailscale.
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+start_timeout_seconds: 600
+backend:
+  name: vla
+  options:
+    external_sensor: head_image
+    wrist_sensor: left_image
+    http_timeout_seconds: 30
+models:
+  # 30 Hz: trained on the MolmoAct2 SO-100/101 dataset mix (1,220 LeRobot datasets, ~92% recorded at 30 fps).
+  - name: molmoact2-so101
+    url: https://huggingface.co/allenai/MolmoAct2-SO100_101
+    revision: "152569fe57914d97be91055800035f54e250d009"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 30
+    endpoint: http://127.0.0.1:9201   # relay -> colosseum-so101:9101
+    backend_options: {robot_type: so101, adapter: molmoact2_so101, num_steps: 10}
+  # 30 Hz: model card -- trained on allenai/MolmoAct2-SO100_101-Dataset (same 30 fps mix).
+  - name: pi05-so101
+    url: https://huggingface.co/hqfang/pi05-so100_101
+    revision: "d3204e03ae84d232e2493a933fd460515904eb58"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 50
+    endpoint: http://127.0.0.1:9202   # relay -> colosseum-so101:9102
+    backend_options: {robot_type: so101, adapter: pi05_so101, num_steps: 10}
+  # 30 Hz: model card -- trained on allenai/MolmoAct2-SO100_101-Dataset (same 30 fps mix).
+  - name: groot-n17-so101
+    url: https://huggingface.co/hqfang/groot-so100_101
+    revision: "f5e17af8948a647e4c23186a27927bf73d6d784e"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 40
+    endpoint: http://127.0.0.1:9203   # relay -> colosseum-so101:9103
+    backend_options: {robot_type: so101, adapter: groot_so101}
+  # 15 Hz: the upstream GalaxeaVLA SO-100 client runs --action-fps 15 ("must match server training FPS"),
+  # and G05 conditions its action decoding on that frequency, so the host must feed it frequency: 15.
+  # The host serves G05 over HTTP /act, so it uses an HTTP so101 adapter name (g05_so101 is WebSocket).
+  - name: g05-so101
+    url: https://huggingface.co/OpenGalaxea/G05
+    revision: "e312be81e90c56a55bcb26b57429bd39a335b449"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 15
+    max_horizon: 30
+    endpoint: http://127.0.0.1:9204   # relay -> colosseum-so101:9104
+    backend_options: {robot_type: so101, adapter: molmoact2_so101}
+  # 30 Hz: README "LingBot VLA v2 - MolmoAct2 SO100/101 Full Fine-Tuning"; finetune_assets train on the
+  # same MolmoAct2 SO-100/101 datasets with no resampling. Revision and contract as the Router registered
+  # them (30 Hz, 50 steps). Note: the host serves revision af0bbb68, subfolder checkpoint-100000.
+  - name: lingbot-molmoact2-so101
+    url: https://huggingface.co/RoboColosseum/LingBot-MolmoAct2-So101
+    revision: "d360710b21beec2804e42ac2d6035022c2a4c1a8"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 50
+    endpoint: http://127.0.0.1:9205   # relay -> colosseum-so101:9105
+    backend_options: {robot_type: so101, adapter: lingbot_so101}

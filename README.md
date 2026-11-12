@@ -55,6 +55,39 @@ with [this configuration](configs/local-runtime-yam-local.yaml.example).
 For the SO-ARM101 generalist checkpoints, follow the [SO101 setup guide](docs/so101.md)
 and use [the SO101 runtime example](configs/local-runtime-so101.yaml.example).
 
+### SO-ARM101 VLAs served from a remote GPU
+
+The runtime accepts only loopback model endpoints. When the SO101 models run on
+another machine, for example all five co-hosted on one GPU node that joins your
+Tailscale tailnet as `colosseum-so101` (see
+[robocolosseum-host](https://github.com/sangnt1552314/robocolosseum-host/tree/master/pbs_remote_inference)),
+start one relay per model from the repository root. Each relay forwards
+`127.0.0.1:920N` to `colosseum-so101:910N`, and every model, G05 included, is
+served over HTTP `/act`:
+
+```bash
+cd colosseum-policy-server
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9101 --port 9201 &   # MolmoAct2
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9102 --port 9202 &   # pi0.5
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9103 --port 9203 &   # GR00T N1.7
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9104 --port 9204 &   # G05
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9105 --port 9205     # LingBot
+```
+
+The remote ports follow the host job's model order
+(`MODELS=molmoact2:pi05:groot:g05:lingbot`); keep the relays and the `endpoint`
+of each model in [the remote SO101 configuration](configs/local-runtime-so101.yaml)
+in that order. Then start the runtime:
+
+```bash
+uv run colosseum-policy-local --config configs/local-runtime-so101.yaml
+```
+
+G05 runs at 15 Hz and the other four at 30 Hz; the Client runs one
+`control_hz` per session. The relay needs only the Python standard library; for
+an ngrok URL instead of a tailnet host, set `COLOSSEUM_TUNNEL_AUTH` (see the
+script's help).
+
 ### Run a Real Robot Policy Server
 
 Install the DROID and LLM adapters once:
