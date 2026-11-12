@@ -1,6 +1,14 @@
 url: wss://router.example.com:8443
 token: pol_replace_with_token_from_router_ui
-# Navigation policies for the Earth Rover Mini+ declare the rover contract instead of the manipulation defaults:
-# action_spaces: [base_velocity]
-# control_hz: 10
-# max_horizon: 10
+# Policy ID of your deployment on the Router. When omitted, the Router uses the token name instead, so
+# trials match only if the token was named after the deployment.
+policy_id: replace-with-your-policy-id
+# Robot contract preset: yam | so101 | franka | earth_rover_mini_plus. Sets action_spaces, control_hz and
+# max_horizon; explicit keys below override it.
+robot: yam
+# max_horizon: 32
+# Keep the registration across Router restarts and network drops.
+reconnect: true
+# WebSocket keepalive in seconds. Raise ping_timeout on slow uplinks.
+# ping_interval: 20
+# ping_timeout: 60

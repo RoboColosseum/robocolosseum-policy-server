@@ -25,6 +25,9 @@ class ColosseumPolicySDK:
         action_spaces: tuple[str, ...] = ("joint_position",),
         control_hz: int = 15,
         max_horizon: int = 16,
+        ping_interval: float = 20,
+        ping_timeout: float = 60,
+        reconnect: bool = False,
     ) -> None:
         self._initialize(
             AsyncColosseumPolicySDK(
@@ -36,6 +39,9 @@ class ColosseumPolicySDK:
                 action_spaces=action_spaces,
                 control_hz=control_hz,
                 max_horizon=max_horizon,
+                ping_interval=ping_interval,
+                ping_timeout=ping_timeout,
+                reconnect=reconnect,
             )
         )
 
