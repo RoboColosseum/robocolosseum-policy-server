@@ -56,6 +56,39 @@ with [this configuration](configs/local-runtime-yam-local.yaml.example).
 For the SO-ARM101 generalist checkpoints, follow the [SO101 setup guide](docs/so101.md)
 and use [the SO101 runtime example](configs/local-runtime-so101.yaml.example).
 
+### SO-ARM101 VLAs served from a remote GPU
+
+The runtime accepts only loopback model endpoints. When the SO101 models run on
+another machine, for example all five co-hosted on one GPU node that joins your
+Tailscale tailnet as `colosseum-so101` (see
+[robocolosseum-host](https://github.com/sangnt1552314/robocolosseum-host/tree/master/pbs_remote_inference)),
+start one relay per model from the repository root. Each relay forwards
+`127.0.0.1:920N` to `colosseum-so101:910N`, and every model, G05 included, is
+served over HTTP `/act`:
+
+```bash
+cd colosseum-policy-server
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9101 --port 9201 &   # MolmoAct2
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9102 --port 9202 &   # pi0.5
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9103 --port 9203 &   # GR00T N1.7
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9104 --port 9204 &   # G05
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9105 --port 9205     # LingBot
+```
+
+The remote ports follow the host job's model order
+(`MODELS=molmoact2:pi05:groot:g05:lingbot`); keep the relays and the `endpoint`
+of each model in [the remote SO101 configuration](configs/local-runtime-so101.yaml)
+in that order. Then start the runtime:
+
+```bash
+uv run colosseum-policy-local --config configs/local-runtime-so101.yaml
+```
+
+G05 runs at 15 Hz and the other four at 30 Hz; the Client runs one
+`control_hz` per session. The relay needs only the Python standard library; for
+an ngrok URL instead of a tailnet host, set `COLOSSEUM_TUNNEL_AUTH` (see the
+script's help).
+
 ### Run a Real Robot Policy Server
 
 Install the DROID and LLM adapters once:
@@ -95,6 +128,13 @@ See [inference architecture](docs/inference-architecture.md) for robot/model
 compatibility and mixed VLA/LLM setup. See
 [Inspect Agent setup](docs/inspect-agent.md) for provider configuration,
 existing Router registration, and holding position after an agent stop request.
+
+On SO-101, models named `<llm>-capx` (Router: `claude-opus-5-5-capx`,
+`gpt-6-astra-capx`, `grok-4.7-capx`) instead run Inspect Robots' CaP-X code-as-policy,
+where the LLM writes Python that calls SAM3 segmentation and IK.
+Install `--extra capx` instead of `--extra agent` and add a `capx` section and
+CaP-X models to your SO-101 runtime configuration; see
+[Inspect CaP-X setup](docs/inspect-capx.md).
 
 ## Host a Remote Policy Server
 
@@ -256,6 +296,11 @@ commands are sent unchanged when the operator's `adapter_config.max_linear` and
 `max_angular` are 1; otherwise pass the same values as `--max-linear` and
 `--max-angular`. The Router is far from most rovers, so each chunk holds the
 command for `--horizon` steps (5, half a second) before the Client asks again.
+
+`baselines/genie_rover` is a complete example: GeNIE (NUS CLeAR Lab, Earth Rover
+Challenge 2025 winner) as an Earth Rovers SDK program, the Earth Rover track's
+first benchmark policy (`genie-rover`). Its README explains how commands are timed
+through the bridge.
 
 ### Start the Policy Server
 

@@ -39,7 +39,7 @@ uv run colosseum-robot configs/robot.yaml
 ```
 
 The Client example defaults to `robot_type: franka`, `test: true`, `track: 1`,
-`router_url: wss://191.222.219.43`, and `policy_server_url: ws://localhost:8000`.
+`router_url: wss://robocolosseum-api.onrender.com`, and `policy_server_url: ws://localhost:8000`.
 No cameras or robot are needed. No `SSL_CERT_FILE` is needed; unset it if previously
 exported for a different local certificate. Cloud TLS verification stays enabled.
 

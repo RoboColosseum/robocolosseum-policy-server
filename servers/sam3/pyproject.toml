@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inspect-robots-sam3-server"
+version = "0.1.0"
+description = "SAM3 segmentation HTTP server for the inspect-robots capx policy (from CaP-X)."
+requires-python = ">=3.10,<3.13"
+license = { text = "MIT (server code from CaP-X); SAM3 model code and weights: SAM License" }
+dependencies = [
+  "torch>=2.8",
+  "torchvision>=0.23",
+  "numpy",
+  "pillow",
+  "fastapi",
+  "uvicorn",
+  "pydantic>=2",
+  # sam3 imports pkg_resources, which newer setuptools releases removed.
+  "setuptools<81",
+  # Imported by sam3 model code at load time but not declared by sam3 itself.
+  "einops",
+  "decord",
+  "pycocotools",
+  "psutil",
+  # SAM3 model code, pinned to the revision CaP-X uses. Installing it and
+  # downloading the weights means accepting Meta's SAM License.
+  "sam3 @ git+https://github.com/Max-Fu/sam3.git@6fe87d64a5beb9084923d7a9e002741178635b09",
+]
+
+[project.scripts]
+inspect-robots-sam3-server = "sam3_server.server:main"
+
+[tool.setuptools]
+packages = ["sam3_server"]
