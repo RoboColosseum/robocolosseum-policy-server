@@ -1,5 +1,5 @@
 # YAM local evaluation: five VLA checkpoints launched on demand on this GPU,
-# plus three LLMs using Inspect YAM EE control. See the Client's docs/local-evals.md.
+# plus the LLMs using Inspect YAM EE control. See the Client's docs/local-evals.md.
 host: 127.0.0.1
 port: 8000
 log_dir: local-policy-logs
@@ -205,6 +205,20 @@ models:
       control_mode: eef_abs_pose
       llm_endpoint: official
   - name: claude-opus-5-5
+    model_type: llm
+    url: https://api.yhlxj.ai
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      control_mode: eef_abs_pose
+      llm_endpoint: official
+  # Registered by the Router for YAM with the same fields as claude-opus-5-5.
+  - name: claude-fable-5-2
     model_type: llm
     url: https://api.yhlxj.ai
     revision: rig-v1

@@ -45,6 +45,19 @@ models:
     backend_options:
       robot_type: yam
       api_auth: bearer
+  # Registered by the Router for YAM with the same fields as claude-opus-5-5.
+  - name: claude-fable-5-2
+    model_type: llm
+    url: https://api.yhlxj.ai
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      api_auth: bearer
   - name: gpt-6-astra
     model_type: llm
     url: https://api.yhlxj.ai/v1

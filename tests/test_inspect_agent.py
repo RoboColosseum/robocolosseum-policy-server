@@ -493,11 +493,12 @@ async def test_yam_rejects_bad_contract_and_right_arm_jump(tmp_path):
     await backend.end_session()
 
 
-async def test_yam_agent_example_routes_all_three_models(tmp_path):
+async def test_yam_agent_example_routes_every_llm(tmp_path):
     from pathlib import Path
     from colosseum_policy_server.backends.auto import AutoBackend
     cfg = RuntimeConfig.from_yaml(Path(__file__).parents[1] / 'configs/local-runtime-yam-agent.yaml.example')
-    assert {m.name for m in cfg.models.values()} == {'grok-4.7', 'claude-opus-5-5', 'gpt-6-astra'}
+    assert {m.name for m in cfg.models.values()} == {'grok-4.7', 'claude-opus-5-5', 'claude-fable-5-2',
+                                                      'gpt-6-astra'}
     backend = AutoBackend({'llm': yam_options(tmp_path)})
     for item in cfg.models.values():
         await backend.start_session(item, {'run_id': 'config', 'api_key': 'test', 'robot_type': 'yam'})
