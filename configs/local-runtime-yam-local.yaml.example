@@ -189,8 +189,8 @@ models:
       - "8204"
   # The Router still advertises 14-D joint control; control_mode makes the
   # Client use Inspect EE control (Client: use_local_action_contract: true).
-  # llm_endpoint: official sends Client keys to the official OpenAI, xAI or
-  # Anthropic API instead of the Router URL. Claude Code login ignores it.
+  # llm_endpoint: official sends Client keys to the official OpenAI, xAI,
+  # Anthropic or Google API instead of the Router URL. Claude Code login ignores it.
   - name: grok-4.7
     model_type: llm
     url: https://api.yhlxj.ai/v1
@@ -244,3 +244,27 @@ models:
       robot_type: yam
       control_mode: eef_abs_pose
       llm_endpoint: official
+  # Router policyId gemini-4-hydrogen-yam. The Router sends the model name
+  # gemini-4-hydrogen: keep it as name (no -yam). The Router registers it with this url,
+  # revision '0' and max_horizon 180 (150 for the other LLMs): the runtime matches every
+  # descriptor field except control_hz.
+  # llm_endpoint: antigravity calls Gemini through the official Antigravity CLI (agy,
+  # install: curl -fsSL https://antigravity.google/cli/install.sh | bash) with the
+  # Client's Gemini API key (llm_api_keys.google = GEMINI_API_KEY); agy bills that key's
+  # AI Studio project. Its model is gemini-4-hydrogen-<effort>. Use llm_endpoint: official
+  # to call Google's OpenAI-compatible API directly instead.
+  - name: gemini-4-hydrogen
+    model_type: llm
+    url: https://generativelanguage.googleapis.com/v1beta
+    revision: '0'
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 180
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      control_mode: eef_abs_pose
+      llm_endpoint: antigravity
+      # Hydrogen thinking levels are low, medium, high and xhigh.
+      effort: medium

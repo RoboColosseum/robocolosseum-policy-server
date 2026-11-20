@@ -92,6 +92,7 @@ llm_api_keys:
   openai: env:OPENAI_API_KEY
   xai: env:XAI_API_KEY
   anthropic: env:ANTHROPIC_API_KEY
+  google: env:GEMINI_API_KEY
 ```
 
 Direct key strings are also accepted. `env:VARIABLE` keeps keys outside YAML.
@@ -122,6 +123,45 @@ SSH tunnel or a TLS proxy for a remote Robot Client.
 | `gpt-6-astra` | `https://api.openai.com/v1` | Responses |
 | `grok-4.7` | `https://api.x.ai/v1` | Chat Completions |
 | `claude-opus-5-5` | `https://api.anthropic.com/v1` | Messages |
+| `gemini-4-hydrogen` | Antigravity CLI (`agy`), or `https://generativelanguage.googleapis.com/v1beta/openai` | `agy -p`, or Chat Completions |
+
+Gemini needs a Client with the `google` key provider (`GEMINI_API_KEY`). The
+Router registers it as policyId `gemini-4-hydrogen-yam` and sends the model name
+`gemini-4-hydrogen`, with `url: https://generativelanguage.googleapis.com/v1beta`,
+`revision: '0'` and `max_horizon: 180` (150 for the other LLMs). Configure
+exactly those (not the `-yam` policyId); any other value fails the run with
+`unregistered model`. `url` and `revision` only identify the model. The Client
+offers Gemini to the Router's `/api/eval/next` as provider `google` with that url.
+
+### Gemini through the Antigravity CLI
+
+The YAM example configs set `llm_endpoint: antigravity` on Gemini. The agent,
+its prompts, robot tools and safety checks are unchanged; only the model call
+goes through the official Antigravity CLI instead of HTTP. Install it once on
+the Policy Server host (it lands in `~/.local/bin/agy`):
+
+```bash
+curl -fsSL https://antigravity.google/cli/install.sh | bash
+agy --version
+```
+
+No Google sign-in is needed. Each call runs `agy -p` in a fresh temporary
+workspace with the Client's key as `GEMINI_API_KEY` and
+`--settings '{"modelProvider": "gemini"}'`, so it bills that key's Google AI
+Studio project and never reads or changes the host's own agy settings. The
+camera frames are written into that workspace as PNGs and referenced with
+`@path`, and `--json-schema` constrains the answer to one robot-tool call. The
+model is `gemini-4-hydrogen-<effort>` (for example `gemini-4-hydrogen-medium`).
+Headless agy denies its own tools that need approval, such as the shell.
+
+Options under the model's `backend_options`: `agy_command` (path, default `agy`
+on `PATH` or `~/.local/bin/agy`), `agy_timeout_s` (default 300) and
+`agy_attempts` (default 2: a reply without the schema is retried once). A
+command-line argument is limited to 128 KiB, so in a long trial the oldest turns
+after the task message are left out of a call, with a note saying how many.
+Each call adds agy's own system prompt (about 7k cached input tokens) and a few
+seconds of CLI start-up. Set `llm_endpoint: official` to call Google's
+OpenAI-compatible API directly instead.
 
 `effort: low` is the default. Do not disable thinking for Opus 5.5. `ready`
 means the configured API client initialized, not that cloud weights were

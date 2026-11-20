@@ -19,7 +19,7 @@ from colosseum_policy_server.local_runtime import LocalPolicyRuntime, RuntimeCon
 
 
 def model(provider="x-ai", name="grok-4.7"):
-    return LocalModel.from_mapping(dict(name=name, model_type="llm", url={"openai":"https://api.openai.com/v1", "x-ai":"https://api.x.ai/v1", "anthropic":"https://api.anthropic.com/v1"}[provider],
+    return LocalModel.from_mapping(dict(name=name, model_type="llm", url={"openai":"https://api.openai.com/v1", "x-ai":"https://api.x.ai/v1", "anthropic":"https://api.anthropic.com/v1", "google":"https://generativelanguage.googleapis.com/v1beta/openai"}[provider],
         revision="rig-v1", endpoint="inprocess://inspect-agent", action_space="joint_position",
         action_dim=8, control_hz=15, max_horizon=2))
 
@@ -63,6 +63,7 @@ def factory(handler):
     ("openai", "gpt-6-astra", "responses", "/v1/responses"),
     ("x-ai", "grok-4.7", "chat", "/v1/chat/completions"),
     ("anthropic", "claude-opus-5-5", "messages", "/v1/messages"),
+    ("google", "gemini-4-hydrogen", "chat", "/v1beta/openai/chat/completions"),
 ])
 async def test_real_agent_provider_conversion_and_reset(tmp_path, provider, name, wire, path):
     requests = []
@@ -323,6 +324,7 @@ async def test_llm_rejects_wrong_so101_action_contract_before_creating_agent(tmp
     ('openai','gpt-6-astra','responses','/v1/responses'),
     ('x-ai','grok-4.7','chat','/v1/chat/completions'),
     ('anthropic','claude-opus-5-5','messages','/v1/messages'),
+    ('google','gemini-4-hydrogen','chat','/v1/chat/completions'),
 ])
 async def test_relay_endpoint_credentials_and_real_inspect(tmp_path, provider, name, wire, path):
     from colosseum_policy_server.backends.llm_transport import BearerTransport
@@ -403,8 +405,9 @@ async def test_observed_bounds_error_identifies_all_bad_dimensions(tmp_path, rob
     ('openai', 'gpt-6-astra', 'responses', '/v1/responses'),
     ('x-ai', 'grok-4.7', 'chat', '/v1/chat/completions'),
     ('anthropic', 'claude-opus-5-5', 'messages', '/v1/messages'),
+    ('google', 'gemini-4-hydrogen', 'chat', '/v1beta/openai/chat/completions'),
 ])
-async def test_yam_three_providers_through_runtime(tmp_path, provider, name, wire, path):
+async def test_yam_every_provider_through_runtime(tmp_path, provider, name, wire, path):
     calls = []
     def handler(request):
         calls.append(json.loads(request.content))
@@ -493,12 +496,53 @@ async def test_yam_rejects_bad_contract_and_right_arm_jump(tmp_path):
     await backend.end_session()
 
 
-async def test_yam_agent_example_routes_every_llm(tmp_path):
+@pytest.mark.parametrize('example', ['agent', 'joint'])
+@pytest.mark.parametrize('sent_name', ['gemini-4-hydrogen', 'gemini-4-hydrogen-yam'])
+async def test_router_gemini_model_name_matches_examples(tmp_path, sent_name, example, fake_agy):
+    # The Router's policyId is gemini-4-hydrogen-yam, but its model descriptor names
+    # gemini-4-hydrogen. Only that name matches; the example calls it through Antigravity
+    # (agy) as gemini-4-hydrogen-medium with the Client's key, not over HTTP.
+    from pathlib import Path
+    _, agy_calls, _ = fake_agy
+    config = RuntimeConfig.from_yaml(Path(__file__).parents[1] / f'configs/local-runtime-yam-{example}.yaml.example')
+    item = next(m for m in config.models.values() if m.name == 'gemini-4-hydrogen')
+    # Exactly the descriptor the Router registers for gemini-4-hydrogen-yam.
+    assert (item.url, item.revision, item.max_horizon) == (
+        'https://generativelanguage.googleapis.com/v1beta', '0', 180)
+    calls = []
+    def handler(request):
+        calls.append((request.url.host, request.url.path, json.loads(request.content)['model']))
+        return httpx.Response(200, json=response('chat', 'move_joints', {
+            'targets': {'left_joint1': .03}, 'note': 'Move the left arm'}))
+    backend = InspectAgentBackend(yam_options(tmp_path), agent_factory=factory(handler))
+    cfg = RuntimeConfig('127.0.0.1', 8000, 'inspect_agent', {}, tmp_path, 1, {'gemini': item})
+    ws = Socket([
+        encode_control(dict(type='prepare', run_id='gemini', robot_type='yam',
+                            model={**item.public_spec(), 'name': sent_name}, api_key='test')),
+        pb.RelayFrame(protocol_version=1, type=pb.OBSERVATION, session_id='gemini',
+            sequence=1, deadline_ms=5000, payload=yam_observation().SerializeToString()).SerializeToString(),
+        pb.RelayFrame(protocol_version=1, type=pb.SESSION_CLOSE, session_id='gemini').SerializeToString(),
+    ])
+    await LocalPolicyRuntime(cfg, backend).handle(ws)
+    if sent_name == 'gemini-4-hydrogen':
+        assert decode_control(ws.sent[0])['type'] == 'ready'
+        assert pb.RelayFrame.FromString(ws.sent[1]).type == pb.ACTION_PLAN
+        assert calls == []
+        [call] = agy_calls()
+        assert call['argv'][call['argv'].index('--model') + 1] == 'gemini-4-hydrogen-medium'
+        assert call['key'] == 'test'
+    else:
+        frame = pb.RelayFrame.FromString(ws.sent[0])
+        assert frame.type == pb.ERROR and pb.Error.FromString(frame.payload).code == 'INVALID_REQUEST'
+        assert calls == [] and agy_calls() == []
+
+
+async def test_yam_agent_example_routes_every_llm(tmp_path, fake_agy):
     from pathlib import Path
     from colosseum_policy_server.backends.auto import AutoBackend
     cfg = RuntimeConfig.from_yaml(Path(__file__).parents[1] / 'configs/local-runtime-yam-agent.yaml.example')
     assert {m.name for m in cfg.models.values()} == {'grok-4.7', 'claude-opus-5-5', 'claude-fable-5-2',
-                                                      'gpt-6-astra'}
+                                                      'gpt-6-astra', 'gemini-4-hydrogen'}
     backend = AutoBackend({'llm': yam_options(tmp_path)})
     for item in cfg.models.values():
         await backend.start_session(item, {'run_id': 'config', 'api_key': 'test', 'robot_type': 'yam'})
