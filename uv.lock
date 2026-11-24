@@ -75,7 +75,7 @@ name = "cffi"
 version = "2.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pycparser", marker = "implementation_name != 'PyPy' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "pycparser" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/9e/ef/008a1939e372c06329a3fce4279c02f328488f3526744906eeec3da7ad5f/cffi-2.1.1.tar.gz", hash = "sha256:dd31f52ea1086513bb9df30f8fcee9b8918323ae067a3d5b78bc826a000712be", size = 530807, upload-time = "2026-08-03T21:21:18.939Z" }
 wheels = [
@@ -417,10 +417,10 @@ name = "colosseum-policy-server"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "async-timeout", marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "async-timeout", marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or extra == 'extra-23-colosseum-policy-server-capx'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra == 'extra-23-colosseum-policy-server-agent') or (python_full_version == '3.11.*' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-23-colosseum-policy-server-agent') or (python_full_version >= '3.12' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
     { name = "protobuf" },
     { name = "pyyaml" },
     { name = "websockets" },
@@ -432,8 +432,8 @@ agent = [
     { name = "inspect-robots-agent", version = "0.26.0", source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=22a4da62776575723c0d6285315fc32cdc0cddf5#22a4da62776575723c0d6285315fc32cdc0cddf5" } },
 ]
 capx = [
-    { name = "inspect-robots", version = "0.58.1.dev1+gec7efc582", source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" } },
-    { name = "inspect-robots-agent", version = "0.26.0", source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" } },
+    { name = "inspect-robots", version = "0.58.1.dev2+g9195825fe", source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" } },
+    { name = "inspect-robots-agent", version = "0.26.0", source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" } },
     { name = "inspect-robots-capx", extra = ["kinematics"], marker = "extra == 'extra-23-colosseum-policy-server-capx'" },
 ]
 demo = [
@@ -447,9 +447,9 @@ dev = [
 droid = [
     { name = "msgpack" },
     { name = "pyzmq" },
-    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
 ]
 
 [package.metadata]
@@ -457,10 +457,10 @@ requires-dist = [
     { name = "async-timeout", marker = "python_full_version < '3.11'", specifier = ">=4,<6" },
     { name = "grpcio-tools", marker = "extra == 'dev'", specifier = ">=1.66" },
     { name = "inspect-robots", marker = "extra == 'agent'", git = "https://github.com/supernoooo/inspect-robots.git?rev=22a4da62776575723c0d6285315fc32cdc0cddf5" },
-    { name = "inspect-robots", marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?rev=ec7efc582a2b8e8ad26a47422464b67eb365573f" },
+    { name = "inspect-robots", marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?rev=9195825fe6ff63d12056caaa2025415aae99429c" },
     { name = "inspect-robots-agent", marker = "extra == 'agent'", git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=22a4da62776575723c0d6285315fc32cdc0cddf5" },
-    { name = "inspect-robots-agent", marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=ec7efc582a2b8e8ad26a47422464b67eb365573f" },
-    { name = "inspect-robots-capx", extras = ["kinematics"], marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-capx&rev=ec7efc582a2b8e8ad26a47422464b67eb365573f" },
+    { name = "inspect-robots-agent", marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=9195825fe6ff63d12056caaa2025415aae99429c" },
+    { name = "inspect-robots-capx", extras = ["kinematics"], marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-capx&rev=9195825fe6ff63d12056caaa2025415aae99429c" },
     { name = "msgpack", marker = "extra == 'droid'", specifier = ">=1,<2" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencv-python", marker = "extra == 'demo'", specifier = ">=4.10,<5" },
@@ -534,7 +534,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -770,8 +770,8 @@ wheels = [
 
 [[package]]
 name = "inspect-robots"
-version = "0.58.1.dev1+gec7efc582"
-source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" }
+version = "0.58.1.dev2+g9195825fe"
+source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" }
 resolution-markers = [
     "python_full_version >= '3.12'",
     "python_full_version == '3.11.*'",
@@ -818,7 +818,7 @@ dependencies = [
 [[package]]
 name = "inspect-robots-agent"
 version = "0.26.0"
-source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" }
+source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" }
 resolution-markers = [
     "python_full_version >= '3.12'",
     "python_full_version == '3.11.*'",
@@ -826,7 +826,7 @@ resolution-markers = [
 ]
 dependencies = [
     { name = "httpx" },
-    { name = "inspect-robots", version = "0.58.1.dev1+gec7efc582", source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" } },
+    { name = "inspect-robots", version = "0.58.1.dev2+g9195825fe", source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" } },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
     { name = "websockets" },
 ]
@@ -834,11 +834,11 @@ dependencies = [
 [[package]]
 name = "inspect-robots-capx"
 version = "0.3.0"
-source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-capx&rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" }
+source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-capx&rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" }
 dependencies = [
     { name = "httpx" },
-    { name = "inspect-robots", version = "0.58.1.dev1+gec7efc582", source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" } },
-    { name = "inspect-robots-agent", version = "0.26.0", source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=ec7efc582a2b8e8ad26a47422464b67eb365573f#ec7efc582a2b8e8ad26a47422464b67eb365573f" } },
+    { name = "inspect-robots", version = "0.58.1.dev2+g9195825fe", source = { git = "https://github.com/supernoooo/inspect-robots.git?rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" } },
+    { name = "inspect-robots-agent", version = "0.26.0", source = { git = "https://github.com/supernoooo/inspect-robots.git?subdirectory=plugins%2Finspect-robots-agent&rev=9195825fe6ff63d12056caaa2025415aae99429c#9195825fe6ff63d12056caaa2025415aae99429c" } },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
 ]
 
@@ -1295,8 +1295,8 @@ version = "4.14.0.94"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or extra == 'extra-23-colosseum-policy-server-capx'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra == 'extra-23-colosseum-policy-server-agent') or (python_full_version == '3.11.*' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-23-colosseum-policy-server-agent') or (python_full_version >= '3.12' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/ed/e8/c2959c0f969ea4ae96b55ad10c108c0410de4e8b3550d9941a4cfdd52703/opencv_python-4.14.0.94.tar.gz", hash = "sha256:afadc76a38a07713a4c2b4702da917cf0ed489be57e2a40a34e670189731de7d", size = 96400225, upload-time = "2026-07-28T19:23:09.546Z" }
 wheels = [
@@ -1872,13 +1872,13 @@ name = "pytest"
 version = "9.1.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "colorama", marker = "sys_platform == 'win32' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "exceptiongroup", marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "colorama", marker = "sys_platform == 'win32'" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
     { name = "iniconfig" },
     { name = "packaging" },
     { name = "pluggy" },
     { name = "pygments" },
-    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e4/47/b9efed96c114afcfa3c9d3fe98a76a1d14c74a9e266d397cf6eb64be5e01/pytest-9.1.1.tar.gz", hash = "sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313", size = 1636369, upload-time = "2026-06-19T10:58:32.857Z" }
 wheels = [
@@ -1890,9 +1890,9 @@ name = "pytest-asyncio"
 version = "1.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "backports-asyncio-runner", marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "backports-asyncio-runner", marker = "python_full_version < '3.11'" },
     { name = "pytest" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/43/7c/d36d04db312ecf4298932ef77e6e4a9e8ad017906e24e34f0b0c361a2473/pytest_asyncio-1.4.0.tar.gz", hash = "sha256:c6c0d2259945122819f171a32ecea2c349ead889ee28176caaf492143424be42", size = 58514, upload-time = "2026-05-26T09:56:04.083Z" }
 wheels = [
@@ -1968,7 +1968,7 @@ name = "pyzmq"
 version = "27.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cffi", marker = "implementation_name == 'pypy' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "cffi", marker = "implementation_name == 'pypy'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/e7/8d/5b3d5631c2f4b4b8862f64cd0c9eb777b5710eeb5125b4be8dd0a200a4c0/pyzmq-27.2.0.tar.gz", hash = "sha256:54d4259d1bfae24ecdb5ca79f7acc2eac6c286a02d6a0ae617797cb45f0726d3", size = 292316, upload-time = "2026-08-20T19:08:21.19Z" }
 wheels = [
@@ -2094,7 +2094,7 @@ resolution-markers = [
     "python_full_version < '3.11'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/0f/37/6964b830433e654ec7485e45a00fc9a27cf868d622838f6b6d9c5ec0d532/scipy-1.15.3.tar.gz", hash = "sha256:eae3cf522bc7df64b42cad3925c876e1b0b6c35c1337c93e12c0f366f55b0eaf", size = 59419214, upload-time = "2025-05-08T16:13:05.955Z" }
 wheels = [
@@ -2153,8 +2153,8 @@ resolution-markers = [
     "python_full_version == '3.11.*'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra == 'extra-23-colosseum-policy-server-agent') or (python_full_version == '3.11.*' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-23-colosseum-policy-server-capx'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-23-colosseum-policy-server-agent' or extra != 'extra-23-colosseum-policy-server-capx'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7a/97/5a3609c4f8d58b039179648e62dd220f89864f56f7357f5d4f45c29eb2cc/scipy-1.17.1.tar.gz", hash = "sha256:95d8e012d8cb8816c226aef832200b1d45109ed4464303e997c5b13122b297c0", size = 30573822, upload-time = "2026-02-23T00:26:24.851Z" }
 wheels = [
@@ -2228,8 +2228,8 @@ resolution-markers = [
     "python_full_version >= '3.12'",
 ]
 dependencies = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra == 'extra-23-colosseum-policy-server-agent') or (python_full_version >= '3.12' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-23-colosseum-policy-server-capx'" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-23-colosseum-policy-server-agent' or extra != 'extra-23-colosseum-policy-server-capx'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/7e/74/66de6258867beb2ef08f35f9f2ac017a52cacd5081714d239ff1a442d458/scipy-1.18.1.tar.gz", hash = "sha256:52c4b7422442aba924d03ad4019852b08a92e64ea187b933135687bfe2747307", size = 30781235, upload-time = "2026-08-21T23:28:50.599Z" }
 wheels = [

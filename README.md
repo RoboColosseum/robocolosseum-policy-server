@@ -129,11 +129,24 @@ compatibility and mixed VLA/LLM setup. See
 [Inspect Agent setup](docs/inspect-agent.md) for provider configuration,
 existing Router registration, and holding position after an agent stop request.
 
-On SO-101, models named `<llm>-capx` (Router: `claude-opus-5-5-capx`,
+On SO-101 and bimanual YAM, models named `<llm>-capx` (Router: `claude-opus-5-5-capx`,
 `gpt-6-astra-capx`, `grok-4.7-capx`) instead run Inspect Robots' CaP-X code-as-policy,
-where the LLM writes Python that calls SAM3 segmentation and IK.
-Install `--extra capx` instead of `--extra agent` and add a `capx` section and
-CaP-X models to your SO-101 runtime configuration; see
+where the LLM writes Python that calls SAM3 segmentation and IK. On YAM it drives
+both arms.
+The `capx` extra installs Inspect Robots and its CaP-X plugin from a pinned
+commit, so nothing else needs installing. It replaces `--extra agent` and still
+runs the tool-calling LLMs in joint mode. On YAM, after installing the SAM3
+server once as described in [Inspect CaP-X setup](docs/inspect-capx.md):
+
+```bash
+uv sync --locked --extra capx
+uv run --locked --extra capx colosseum-policy-local --config configs/local-runtime-yam-capx.yaml
+```
+
+Copy and fill in `configs/local-runtime-yam-capx.yaml.example` first, or add
+its `capx` section and `-capx` models to an existing YAM config. Its
+`sam3_launcher` starts SAM3 for each CaP-X session and stops it afterwards, so
+SAM3 needs no terminal of its own. SO-101 also needs `--extra droid`; see
 [Inspect CaP-X setup](docs/inspect-capx.md).
 
 ## Host a Remote Policy Server

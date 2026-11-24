@@ -1,0 +1,108 @@
+# Bimanual YAM: CaP-X code-as-policy LLMs ("-capx" names) next to the
+# tool-calling YAM joint agents. See docs/inspect-capx.md.
+# Install: uv sync --locked --extra capx
+# SAM3 starts with each CaP-X session (capx.sam3_launcher); install it once as
+# described in docs/inspect-capx.md and run it by hand once to download weights.
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+start_timeout_seconds: 600
+backend:
+  name: auto
+  options:
+    llm:
+      # Shared by inspect_agent and inspect_capx.
+      robot_type: yam
+      # REQUIRED: 12 finite values each, left six joints then right six, radians.
+      # Match the Client's calibrated operating limits.
+      joint_low: null
+      joint_high: null
+      joint_max_step: null
+      gripper_open_value: 1
+      sensors: [head_image, left_image, right_image]
+      # REQUIRED: replace with actual joint directions, base mounting and camera geometry.
+      robot_notes: ""
+      effort: low
+      max_llm_calls: 30
+      # inspect_agent only; YAM CaP-X paces with joint_speed_rad_s below.
+      max_speed_frac: 0.1
+      log_dir: agent-logs
+    capx:
+      # REQUIRED: i2rt's YAM arm URDF next to its assets/ meshes. The Client's
+      # I2RT install has it at
+      # colosseum-client/.venv/lib/python3.12/site-packages/i2rt/robot_models/arm/yam/v1/yam.urdf
+      urdf_path: /absolute/path/to/i2rt/robot_models/arm/yam/v1/yam.urdf
+      sam3_url: http://127.0.0.1:8114
+      # Started for each CaP-X session and stopped after it, unless SAM3 is
+      # already listening at sam3_url. Relative to the repository root.
+      sam3_launcher: [servers/sam3/.venv/bin/python, -m, sam3_server, --port, "8114"]
+      # The RealSense camera segment() and depth refer to; the Client streams its
+      # aligned depth (adapter_config.depth_camera must name the same camera).
+      capx_camera: head_image
+      capx_depth: true
+      # Queued capx motion speed; the rig's joint_max_step still bounds every step.
+      joint_speed_rad_s: 0.3
+      gripper_speed_per_s: 1.0
+      # Match the Client's adapter_config.gripper_max_step.
+      gripper_max_step: 0.15
+      # Optional: measure both arm bases [x, y, z, yaw_deg] (metres, degrees) in
+      # one rig frame so both arms share coordinates. Without it each arm uses
+      # its own base frame.
+      # arm_base_poses:
+      #   left: [0.0, 0.30, 0.0, 0.0]
+      #   right: [0.0, -0.30, 0.0, 0.0]
+      # Optional rig notes (Markdown) appended to the CaP-X prompt.
+      # prior_learnings: /absolute/path/to/yam-capx-rig-notes.md
+models:
+  # Names, URLs, revisions, the 14-D joint contract and max_horizon must match
+  # the Router registration of each model for YAM.
+  - name: claude-opus-5-5-capx
+    model_type: llm
+    url: https://api.yhlxj.ai
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      llm_endpoint: official
+  - name: gpt-6-astra-capx
+    model_type: llm
+    url: https://api.yhlxj.ai/v1
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      llm_endpoint: official
+  - name: grok-4.7-capx
+    model_type: llm
+    url: https://api.yhlxj.ai/v1
+    revision: '4.7'
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      llm_endpoint: official
+  # The tool-calling agents keep working next to the CaP-X models.
+  - name: claude-opus-5-5
+    model_type: llm
+    url: https://api.yhlxj.ai
+    revision: rig-v1
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 150
+    endpoint: inprocess://inspect-agent
+    backend_options:
+      robot_type: yam
+      control_mode: joint_pos
+      llm_endpoint: official

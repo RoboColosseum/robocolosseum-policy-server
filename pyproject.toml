@@ -24,11 +24,12 @@ agent = [
   "inspect-robots-agent @ git+https://github.com/supernoooo/inspect-robots.git@22a4da62776575723c0d6285315fc32cdc0cddf5#subdirectory=plugins/inspect-robots-agent",
 ]
 # CaP-X code-as-policy LLMs ("-capx" names). Install this instead of [agent]:
-# core, agent and capx (with URDF kinematics) come from one inspect-robots commit.
+# core, agent and capx (with URDF kinematics and the multi-arm profile for
+# bimanual YAM) come from one inspect-robots commit (branch yam-capx).
 capx = [
-  "inspect-robots @ git+https://github.com/supernoooo/inspect-robots.git@ec7efc582a2b8e8ad26a47422464b67eb365573f",
-  "inspect-robots-agent @ git+https://github.com/supernoooo/inspect-robots.git@ec7efc582a2b8e8ad26a47422464b67eb365573f#subdirectory=plugins/inspect-robots-agent",
-  "inspect-robots-capx[kinematics] @ git+https://github.com/supernoooo/inspect-robots.git@ec7efc582a2b8e8ad26a47422464b67eb365573f#subdirectory=plugins/inspect-robots-capx",
+  "inspect-robots @ git+https://github.com/supernoooo/inspect-robots.git@9195825fe6ff63d12056caaa2025415aae99429c",
+  "inspect-robots-agent @ git+https://github.com/supernoooo/inspect-robots.git@9195825fe6ff63d12056caaa2025415aae99429c#subdirectory=plugins/inspect-robots-agent",
+  "inspect-robots-capx[kinematics] @ git+https://github.com/supernoooo/inspect-robots.git@9195825fe6ff63d12056caaa2025415aae99429c#subdirectory=plugins/inspect-robots-capx",
 ]
 
 [project.entry-points."colosseum_policy_server.backends"]
