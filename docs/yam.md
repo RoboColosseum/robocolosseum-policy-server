@@ -1,5 +1,7 @@
 # MolmoAct2-BimanualYAM
 
+For Dream-1 cloud inference on YAM, see [Dream-1 YAM](dreamlabs-yam.md).
+
 The `molmoact2_yam` VLA adapter connects Colosseum's local protocol to the
 [upstream YAM HTTP /act protocol](https://github.com/allenai/molmoact2/blob/6070080a20321b4f498ab30f28e1d09ac465edb7/examples/yam/host_server_yam.py).
 It requires `robot_type: yam`, 14-D absolute `joint_position` at 30 Hz, three

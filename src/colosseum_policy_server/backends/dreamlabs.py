@@ -16,6 +16,9 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import http.client
+import ssl
+import threading
 import time
 
 import numpy as np
@@ -45,6 +48,20 @@ WARMUP_GAP_S = 1.0
 # asks HOLD_ASKS more times, HOLD_PERIOD_S apart, the arms still, and plays the reply asked for 7.2 s after the first.
 HOLD_ASKS = 3
 HOLD_PERIOD_S = 2.4
+# Additional attempts per error family; the caller's inference deadline bounds the whole recovery.
+RETRY_DELAYS_S = (0.5, 1.0, 2.0)
+
+
+def _transient_transport_error(error: BaseException) -> bool:
+    """Retry dropped TLS/socket connections, not malformed replies or certificate errors."""
+    seen = set()
+    while error is not None and id(error) not in seen:
+        seen.add(id(error))
+        if isinstance(error, (ssl.SSLEOFError, ssl.SSLZeroReturnError,
+                              ConnectionResetError, BrokenPipeError, http.client.RemoteDisconnected)):
+            return True
+        error = error.__cause__ or error.__context__
+    return False
 
 
 def create_backend(options):
@@ -117,6 +134,10 @@ class DreamLabsBackend:
         self.hold_asks = options.get("hold_asks", HOLD_ASKS)
         self.hold_period_s = options.get("hold_period_s", HOLD_PERIOD_S)
         self.client = None
+        self.startup_task = None
+        self.request = None
+        self.played_s = 0.0
+        self._retry_stop = threading.Event()
 
     async def start_session(self, model: LocalModel, request) -> None:
         """Check the model is a 14-D YAM joint model and open the trial's dream client session."""
@@ -126,12 +147,19 @@ class DreamLabsBackend:
             raise ValueError(f"dreamlabs backend requires max_horizon of at least {self.rows_per_call}")
         import dream
 
+        self._retry_stop.clear()
         self.control_hz = model.control_hz
         # The most plan time one call may add, so a stalled Client resumes the plan where its arms stopped.
         self.max_advance_s = 2 * self.rows_per_call / model.control_hz
         self.client = dream.DreamClient()
         # action_hz times the client's prefetch in rows of the plan.
-        self.client.policy({"checkpoint": self.checkpoint, "strict": False, "action_hz": self.plan_hz})
+        self.startup_task = asyncio.create_task(asyncio.to_thread(self.client.policy, {
+            "checkpoint": self.checkpoint, "strict": False, "action_hz": self.plan_hz,
+            "robot": "yam", "timeout_ms": 30000, "_record": False,
+        }))
+        # Cancelling preparation cannot stop its SDK thread. Keep the task alive
+        # so end_session can wait for it before closing anything it creates.
+        await asyncio.shield(self.startup_task)
         self.plan_s = 0.0
         self.playing_since = None  # wall time the arms started the last call's targets; None while they wait
         self.played_s = 0.0
@@ -146,30 +174,40 @@ class DreamLabsBackend:
 
     async def infer(self, model: LocalModel, observation: pb.Observation) -> np.ndarray:
         """Return the targets of the Client's next rows_per_call steps, requesting the next chunk when it is due."""
-        now = time.monotonic()
-        self._advance_plan(now)
-        self._install_reply()
-        self.client.set_observation(*_model_inputs(observation), timestamp=now)
-        if self.replies == 0 and self.request is None:
-            await self._hold_for_planner()
-        due = self._next_chunk_due(now)
-        if self.request is None and due:
-            self._ask(now)
-        targets = await self._wait_for_targets()
-        self.last_target = targets[-1]
-        return targets
+        try:
+            now = time.monotonic()
+            self._advance_plan(now)
+            self._install_reply()
+            self.client.set_observation(*_model_inputs(observation), timestamp=now)
+            if self.replies == 0 and self.request is None:
+                await self._hold_for_planner()
+            due = self._next_chunk_due(now)
+            if self.request is None and due:
+                self._ask(now)
+            targets = await self._wait_for_targets()
+            self.last_target = targets[-1]
+            return targets
+        except BaseException:
+            # wait_for() cancels this coroutine at the outer deadline. Its SDK thread
+            # cannot be cancelled, but must not start another attempt or return a late plan.
+            self._retry_stop.set()
+            raise
 
     async def end_session(self) -> None:
         """Wait for the request in flight, print the playback rate and close the session."""
         if self.client is None:
             return
-        if self.request is not None:
-            await asyncio.wait({self.request})  # the client takes one call at a time, close() included
+        self._retry_stop.set()
+        pending = [task for task in (self.startup_task, self.request) if task is not None]
+        if pending:
+            # The client takes one call at a time, close() included. Retrieve
+            # late failures without replacing the caller's original exception.
+            await asyncio.gather(*pending, return_exceptions=True)
         if self.played_s:
             print(f"dreamlabs: played {self.plan_s * self.plan_hz:.0f} plan rows in {self.played_s:.1f} s of play, "
                   f"{self.plan_s * self.plan_hz / self.played_s:.1f} rows/s", flush=True)
         print(f"dreamlabs: closing session {self.client.session_id}", flush=True)
-        self.client.close()
+        await asyncio.to_thread(self.client.close)
         self.client = None
 
     def _advance_plan(self, now: float) -> None:
@@ -207,8 +245,41 @@ class DreamLabsBackend:
         # The new chunk takes over from the row after each arm's last commanded joints.
         last = self.last_target
         commanded = None if last is None else {"q_l_chunk": last[:7].tolist(), "q_r_chunk": last[7:].tolist()}
-        self.request = asyncio.create_task(asyncio.to_thread(self.client.get_action, commanded=commanded))
+        self.request = asyncio.create_task(asyncio.to_thread(self._get_action, commanded))
         self.asked_at, self.asked_plan_s = now, self.plan_s
+
+    def _get_action(self, commanded):
+        from dream.errors import DreamProtocolError, DreamSessionExpired
+
+        retries = {'transport': 0, 'session': 0}
+        while True:
+            if self._retry_stop.is_set():
+                raise asyncio.CancelledError()
+            try:
+                reply = self.client.get_action(commanded=commanded)
+            except (DreamProtocolError, DreamSessionExpired) as error:
+                if isinstance(error, DreamSessionExpired):
+                    # The SDK already adopted the replacement session; retain the
+                    # last commanded joints for blending instead of replaying a chunk.
+                    kind = 'session'
+                elif _transient_transport_error(error):
+                    # The SDK dropped the failed connection; the next call reconnects.
+                    kind = 'transport'
+                else:
+                    raise
+                attempt = retries[kind]
+                if self._retry_stop.is_set() or attempt >= len(RETRY_DELAYS_S):
+                    raise
+                delay = RETRY_DELAYS_S[attempt]
+                retries[kind] += 1
+                print(f'dreamlabs: {kind} retry {attempt + 1}/{len(RETRY_DELAYS_S)} '
+                      f'in {delay:g} s', flush=True)
+                if self._retry_stop.wait(delay):
+                    raise
+            else:
+                if self._retry_stop.is_set():
+                    raise asyncio.CancelledError()
+                return reply
 
     async def _wait_for_targets(self) -> np.ndarray:
         """Return the call's targets, holding the arms until a chunk with rows still due has landed."""

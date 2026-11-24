@@ -118,8 +118,7 @@ Dream Labs models (`dreamlabs/dream-1-beta` on a bimanual YAM) run on Dream Labs
 `dreamlabs-client` library, so nothing runs on a local GPU:
 
 ```bash
-uv sync --extra demo  # OpenCV, which encodes the camera frames
-uv pip install -U dreamlabs-client
+uv sync --extra dreamlabs  # Pinned Dream SDK and OpenCV
 export DREAM_API_KEY=<your key>  # or put it in ~/.dreamlabs/credentials
 .venv/bin/colosseum-policy-local --config configs/local-runtime-yam-dreamlabs.yaml.example
 ```
@@ -127,10 +126,11 @@ export DREAM_API_KEY=<your key>  # or put it in ~/.dreamlabs/credentials
 The `dreamlabs` backend plays the model's plan at 20 Hz, the rate Dream Labs' YAM stations play it at,
 interpolating between rows for the Client's 30 Hz steps. It keeps the model's frame window and fetches the next action
 chunk while the arms play the current one, so each inference call returns 3 targets (0.1 s at 30 Hz), normally from a
-local buffer. A trial's first call holds the arms still for under 8 s, until the model's task planner has a plan;
-the Client counts executed steps, so the hold uses none of the trial's steps, and it stays well inside the default
-30-second `deadline_ms`. Each trial is one model session, opened when the trial starts and closed when it ends.
-Camera frames are center-cropped to 16:9 for the model.
+local buffer. A trial's first call waits for the task planner; network latency can extend the initial hold.
+The Client counts executed steps, so the hold uses none of the trial's steps. Configure the Client's
+`deadline_ms: 60000` separately. Each trial is one model session, opened when the trial starts and closed when it ends.
+Camera frames are center-cropped to 16:9 for the model. The example selects Dream through `auto`;
+the direct `dreamlabs` backend entry point remains available. See [Dream YAM setup and recovery](docs/dreamlabs-yam.md).
 
 ### Use a cloud LLM through Inspect Robots
 
