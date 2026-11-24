@@ -11,8 +11,15 @@ class AutoBackend:
     async def start_session(self, model, request):
         if self.active is not None:
             raise RuntimeError('Previous model session has not closed')
-        shared = {key: value for key, value in self.options.items() if key not in {'llm', 'vla', 'capx'}}
-        if is_capx(model):
+        shared = {key: value for key, value in self.options.items() if key not in {'llm', 'vla', 'capx', 'dreamlabs'}}
+        if model.backend_options.get('backend') == 'dreamlabs':
+            from .dreamlabs import DreamLabsBackend
+            from ..model_adapters.robots import session_robot
+            if model.model_type != 'vla' or session_robot(model, request, self.options) != 'yam':
+                raise ValueError('Dream Labs requires a bimanual YAM VLA session')
+            self.active = DreamLabsBackend({**shared, **self.options.get('dreamlabs', {})})
+            await self.active.start_session(model, request)
+        elif is_capx(model):
             self.active = InspectCapxBackend(
                 {**shared, **self.options.get('llm', {}), **self.options.get('capx', {})})
             await self.active.start_session(model, request)

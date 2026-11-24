@@ -444,6 +444,10 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
+dreamlabs = [
+    { name = "dreamlabs-client" },
+    { name = "opencv-python" },
+]
 droid = [
     { name = "msgpack" },
     { name = "pyzmq" },
@@ -455,6 +459,7 @@ droid = [
 [package.metadata]
 requires-dist = [
     { name = "async-timeout", marker = "python_full_version < '3.11'", specifier = ">=4,<6" },
+    { name = "dreamlabs-client", marker = "extra == 'dreamlabs'", specifier = "==1.1.3" },
     { name = "grpcio-tools", marker = "extra == 'dev'", specifier = ">=1.66" },
     { name = "inspect-robots", marker = "extra == 'agent'", git = "https://github.com/supernoooo/inspect-robots.git?rev=22a4da62776575723c0d6285315fc32cdc0cddf5" },
     { name = "inspect-robots", marker = "extra == 'capx'", git = "https://github.com/supernoooo/inspect-robots.git?rev=9195825fe6ff63d12056caaa2025415aae99429c" },
@@ -464,6 +469,7 @@ requires-dist = [
     { name = "msgpack", marker = "extra == 'droid'", specifier = ">=1,<2" },
     { name = "numpy", specifier = ">=1.26" },
     { name = "opencv-python", marker = "extra == 'demo'", specifier = ">=4.10,<5" },
+    { name = "opencv-python", marker = "extra == 'dreamlabs'", specifier = ">=4.10,<5" },
     { name = "protobuf", specifier = ">=6.33.5,<7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.24" },
@@ -472,7 +478,7 @@ requires-dist = [
     { name = "scipy", marker = "extra == 'droid'", specifier = ">=1.10,<2" },
     { name = "websockets", specifier = ">=15,<16" },
 ]
-provides-extras = ["dev", "demo", "droid", "agent", "capx"]
+provides-extras = ["dreamlabs", "dev", "demo", "droid", "agent", "capx"]
 
 [[package]]
 name = "decorator"
@@ -481,6 +487,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/60/8b/32f9823da46cde7df2087faa08cd98d01b908f8dcab982cdba9c84e85355/decorator-5.3.1.tar.gz", hash = "sha256:4cbcdd55a6efadb9dbea26b858f4fb3264567b52d69ca0d25b721b553f60ea82", size = 58084, upload-time = "2026-05-18T06:03:28.057Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/05/7f/798705f5296a58ca505d600456748d1be48078eac8a7050d8a98bc9edb89/decorator-5.3.1-py3-none-any.whl", hash = "sha256:f47fe6fdbd2edd623ecfe36875d37aba411624e2670dd395dddae1358689bb3c", size = 10365, upload-time = "2026-05-18T06:03:26.517Z" },
+]
+
+[[package]]
+name = "dreamlabs-client"
+version = "1.1.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11' or extra == 'extra-23-colosseum-policy-server-capx'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version == '3.11.*' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "numpy", version = "2.5.2", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and extra != 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "websockets" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ef/dd/a22b42032b21162c2865ca5c550ff1b7105293ccdbe8189d26f389c27022/dreamlabs_client-1.1.3-py3-none-any.whl", hash = "sha256:c7db356fe899a00342a3bcf9a6c1655390799207b425f34314688d4d1d48ab80", size = 942157, upload-time = "2026-11-07T00:13:58.591Z" },
 ]
 
 [[package]]
@@ -950,15 +970,15 @@ name = "meshcat"
 version = "0.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ipython", version = "8.39.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "ipython", version = "9.18.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "ipython", version = "8.39.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' or extra == 'extra-23-colosseum-policy-server-agent') and extra == 'extra-23-colosseum-policy-server-capx'" },
+    { name = "ipython", version = "9.18.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' or extra == 'extra-23-colosseum-policy-server-agent') and extra == 'extra-23-colosseum-policy-server-capx'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" } },
-    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "pillow", version = "12.3.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' or extra == 'extra-23-colosseum-policy-server-agent') and extra == 'extra-23-colosseum-policy-server-capx'" },
+    { name = "pillow", version = "13.0.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' or extra == 'extra-23-colosseum-policy-server-agent') and extra == 'extra-23-colosseum-policy-server-capx'" },
     { name = "pyngrok" },
     { name = "pyzmq" },
-    { name = "tornado", version = "6.5.10", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
-    { name = "tornado", version = "6.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' and extra == 'extra-23-colosseum-policy-server-capx') or (extra == 'extra-23-colosseum-policy-server-agent' and extra == 'extra-23-colosseum-policy-server-capx')" },
+    { name = "tornado", version = "6.5.10", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.11' or extra == 'extra-23-colosseum-policy-server-agent') and extra == 'extra-23-colosseum-policy-server-capx'" },
+    { name = "tornado", version = "6.6.1", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.11' or extra == 'extra-23-colosseum-policy-server-agent') and extra == 'extra-23-colosseum-policy-server-capx'" },
     { name = "u-msgpack-python" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/af/c2/fae203e8e2119d4c793c9d7d2b8d1fea10752bb39b7b330beb8e67b6117c/meshcat-0.3.2.tar.gz", hash = "sha256:2cfe17cde4fe85d072a3de018a9dabf5626f80c255fff2ce63b26a48d2484ad9", size = 611361, upload-time = "2021-11-07T20:31:55.305Z" }

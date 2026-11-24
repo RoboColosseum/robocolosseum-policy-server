@@ -16,6 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dreamlabs = ["dreamlabs-client==1.1.3", "opencv-python>=4.10,<5"]
 dev = ["grpcio-tools>=1.66", "pytest>=8", "pytest-asyncio>=0.24"]
 demo = ["opencv-python>=4.10,<5"]
 droid = ["msgpack>=1,<2", "pyzmq>=25,<28", "scipy>=1.10,<2"]

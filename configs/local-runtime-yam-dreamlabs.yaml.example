@@ -1,0 +1,24 @@
+# Dream-only YAM runtime. Credentials are supplied outside this file.
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+start_timeout_seconds: 600
+backend:
+  name: auto
+  options:
+    dreamlabs:
+      checkpoint: dreamlabs/dream-1-beta
+models:
+  - name: dream-1
+    model_type: vla
+    url: https://huggingface.co/dreamlabs/dream-1
+    revision: '0000000000000000000000000000000000000000'
+    subfolder: /
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    max_horizon: 48
+    endpoint: ws://127.0.0.1:8000
+    backend_options:
+      backend: dreamlabs
+      robot_type: yam
