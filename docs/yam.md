@@ -69,12 +69,17 @@ latency, motor operation or task success. See the
 [Client YAM guide](../../colosseum-client/docs/yam.md) for hardware configuration
 and shutdown behavior.
 
-## Inspect Agent: Grok, Opus and GPT
+## Inspect Agent: Grok, Opus, GPT and Gemini
 
 The Colosseum Inspect Agent adapter supports the same YAM Client with
-`grok-4.7`, `claude-opus-5-5`, and `gpt-6-astra` model identifiers. These reuse
-the existing Chat Completions, Anthropic Messages, and Responses transports
-respectively. This is adapter support; model availability, credentials and
+`grok-4.7`, `claude-opus-5-5`, `gpt-6-astra` and `gemini-4-hydrogen` model
+identifiers. Grok, Opus and GPT reuse the existing Chat Completions, Anthropic
+Messages and Responses transports. The example configs call Gemini through the
+Antigravity CLI (`agy`), which must be installed on this host; see
+[Gemini through the Antigravity CLI](inspect-agent.md#gemini-through-the-antigravity-cli).
+Gemini is policyId `gemini-4-hydrogen-yam` on the Router, which
+sends the model name `gemini-4-hydrogen`; see
+[inspect-agent.md](inspect-agent.md#client-owned-api-keys-byok). This is adapter support; model availability, credentials and
 relay compatibility must be checked against your actual provider.
 
 ```bash

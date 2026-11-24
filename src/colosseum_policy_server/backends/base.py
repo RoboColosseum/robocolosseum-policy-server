@@ -54,7 +54,7 @@ class LocalModel:
         # deliberately limited to the in-process agent, not arbitrary endpoints.
         identity = urlsplit(model.url)
         cloud = (
-            identity.scheme == "llm" and identity.netloc in {"openai", "x-ai", "anthropic"}
+            identity.scheme == "llm" and identity.netloc in {"openai", "x-ai", "anthropic", "google"}
             and bool(identity.path.strip("/")) and not identity.query and not identity.fragment
             and model.endpoint == "inprocess://inspect-agent" and not model.launcher
             and bool(model.revision.strip())
@@ -70,7 +70,7 @@ class LocalModel:
                   and (local_endpoint or agent_manifest))
         typed_cloud = (model.model_type == "llm" and identity.scheme == 'https' and bool(identity.hostname)
             and not any((identity.username, identity.password, identity.query, identity.fragment))
-            and model.name.startswith(('gpt-', 'grok-', 'claude-'))
+            and model.name.startswith(('gpt-', 'grok-', 'claude-', 'gemini-'))
             and model.endpoint == "inprocess://inspect-agent" and not model.launcher and bool(model.revision.strip()))
         valid_source = typed_cloud if model.model_type == "llm" else (cloud or legacy)
         if (model.model_type not in {"vla", "llm"} or not model.name or not valid_source or not model.action_space or model.action_dim < 1 or model.control_hz < 1 or model.max_horizon < 1):

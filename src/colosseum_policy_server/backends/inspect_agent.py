@@ -29,6 +29,7 @@ OFFICIAL_LLM_URLS = {
     'openai': 'https://api.openai.com/v1',
     'x-ai': 'https://api.x.ai/v1',
     'anthropic': 'https://api.anthropic.com/v1',
+    'google': 'https://generativelanguage.googleapis.com/v1beta/openai',
 }
 YAM_EEF_LABELS = tuple(f'{side}_{axis}' for side in ('left', 'right')
                        for axis in ('x', 'y', 'z', 'yaw', 'pitch', 'roll', 'gripper'))
@@ -88,7 +89,8 @@ class InspectAgentBackend:
         typed = model.model_type == "llm"
         providers = {"gpt-": ("openai", "OPENAI_API_KEY"),
                      "grok-": ("x-ai", "XAI_API_KEY"),
-                     "claude-": ("anthropic", "ANTHROPIC_API_KEY")}
+                     "claude-": ("anthropic", "ANTHROPIC_API_KEY"),
+                     "gemini-": ("google", "GEMINI_API_KEY")}
         if typed:
             provider, key_env, model_prefix = next(
                 ((value[0], value[1], prefix) for prefix, value in providers.items()
@@ -104,7 +106,7 @@ class InspectAgentBackend:
             identity = urlsplit(f"llm://{provider}/{model.name}")
         if model.url.startswith("https://huggingface.co/"):
             identity = urlsplit("llm://" + str(model.backend_options.get("agent_model", "")))
-        wires = {"openai": "responses", "x-ai": "chat", "anthropic": "messages"}
+        wires = {"openai": "responses", "x-ai": "chat", "anthropic": "messages", "google": "chat"}
         if identity.scheme != "llm" or identity.netloc not in wires or model.endpoint != "inprocess://inspect-agent":
             raise ValueError("inspect_agent requires an llm://provider/model identity")
         if self.control_mode != "eef_delta_pose":
@@ -166,9 +168,13 @@ class InspectAgentBackend:
         if auth_method not in {"api-key", "claude-code"}:
             raise ValueError("Unsupported LLM authentication method")
         endpoint = settings.get("llm_endpoint", "router")
-        if endpoint not in {"router", "official"}:
-            raise ValueError("llm_endpoint must be router or official")
+        if endpoint not in {"router", "official", "antigravity"}:
+            raise ValueError("llm_endpoint must be router, official or antigravity")
         account = auth_method == "claude-code"
+        # antigravity: the official Antigravity CLI (agy) calls Gemini with the Client's
+        # Gemini API key; see agy_client.py.
+        if endpoint == "antigravity" and (not typed or provider != "google" or account):
+            raise ValueError("llm_endpoint antigravity is only valid for gemini-* models with an API key")
         if account:
             if not typed or provider != "anthropic" or request.get("api_key"):
                 raise ValueError("Claude Code login is only valid for Claude without an API key")
@@ -190,11 +196,11 @@ class InspectAgentBackend:
                 raise ValueError("Client must supply its API key for this LLM")
             # Per-agent credential environment; never mutate process env or
             # fall back to another Client's / the host's provider credentials.
-            # official / api_base_url: the Router URL stays the model identity
-            # only, so official keys are never sent to a relay URL in that descriptor.
+            # official / antigravity / api_base_url: the Router URL stays the model
+            # identity only, so official keys are never sent to a relay URL in that descriptor.
             official = OFFICIAL_LLM_URLS[provider]
             base_url = str(settings.get("api_base_url")
-                           or (official if endpoint == "official" else model.url)).rstrip("/")
+                           or (official if endpoint in {"official", "antigravity"} else model.url)).rstrip("/")
             if settings.get("api_base_url") and base_url != official:
                 raise ValueError("api_base_url override must be the selected provider's official API URL")
             if self.control_mode == "eef_delta_pose" and base_url != official:
@@ -210,7 +216,10 @@ class InspectAgentBackend:
                 from .llm_transport import BearerTransport
                 kwargs["transport"] = BearerTransport(api_key)
         try:
-            wire = "claude-code" if account else settings.get("api_format", wires[identity.netloc])
+            wire = ("claude-code" if account
+                    # AgyClient reads the chat wire's messages (text and image_url parts).
+                    else "chat" if endpoint == "antigravity"
+                    else settings.get("api_format", wires[identity.netloc]))
             self.agent = factory(model=api_model if typed else f"{identity.netloc}/{identity.path.lstrip('/')}",
                                  wire=wire, wire_capture=False, **kwargs)
             if typed and not account and urlsplit(kwargs["base_url"]).hostname != "api.openai.com":
@@ -219,6 +228,16 @@ class InspectAgentBackend:
                 client = getattr(self.agent, "_client", None)
                 if hasattr(client, "_cache_anchors"):
                     client._cache_anchors = False
+            if endpoint == "antigravity":
+                # Same agent, prompts, tools and checks; only the model call goes through agy.
+                from .agy_client import AgyClient
+                http_client = getattr(self.agent, "_client", None)
+                self.agent._client = AgyClient(
+                    api_model, api_key=request["api_key"], command=settings.get("agy_command"),
+                    timeout_s=settings.get("agy_timeout_s", 300), attempts=settings.get("agy_attempts", 2),
+                    capture=getattr(self.agent, "_capture", None))
+                if hasattr(http_client, "close"):
+                    http_client.close()
         except Exception:
             if "transport" in kwargs:
                 kwargs["transport"].close()
