@@ -7,6 +7,8 @@ loaded once and stays warm across trials; the connection re-registers after drop
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import argparse
 import asyncio
 import json
@@ -80,9 +82,10 @@ class RemotePolicyRunner:
         started = time.monotonic()
         budget = (observation.deadline_ms or 30000) / 1000
         try:
-            actions = await asyncio.wait_for(self.backend.infer(self.model, observation.message), budget)
-            actions = np.asarray(actions, dtype=np.float32)
-            await self.sdk.send_action(actions, observation=observation, control_hz=self.model.control_hz)
+            output = await asyncio.wait_for(self.backend.infer(self.model, observation.message), budget)
+            actions = np.asarray(output['actions'] if isinstance(output, Mapping) else output, dtype=np.float32)
+            await self.sdk.send_action(output if isinstance(output, Mapping) else actions,
+                                       observation=observation, control_hz=self.model.control_hz)
         except StaleObservationError:
             _log("stale_observation", sequence=observation.sequence)
             return

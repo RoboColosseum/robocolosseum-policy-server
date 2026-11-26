@@ -117,6 +117,7 @@ class LingBotYAMRuntime:
         actions = np.asarray(result['action'], dtype=np.float32)
         if actions.shape != (30, 14) or not np.isfinite(actions).all():
             raise ValueError('LingBot YAM must return finite 30 x 14 absolute actions')
+        raw_actions = actions.copy()
         grippers = actions[:, [6, 13]]
         outside = (grippers < 0) | (grippers > 1)
         if np.any(outside):
@@ -131,4 +132,5 @@ class LingBotYAMRuntime:
         check_bounds(actions[:, [6, 13]], 0, 1, ('left_gripper', 'right_gripper'),
                      'LingBot YAM action grippers outside [0, 1]')
         # Predict the full trained 30-step chunk; optionally execute only a prefix.
-        return {'actions': actions[:self.return_steps]}
+        return {'actions': actions[:self.return_steps], 'raw_actions': raw_actions,
+                'raw_action_source': 'model_output_before_action_safety_clipping'}

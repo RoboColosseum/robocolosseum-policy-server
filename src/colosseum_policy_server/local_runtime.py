@@ -244,15 +244,12 @@ class LocalPolicyRuntime:
                              "verification_only":verification_only,
                              "control_mode": getattr(self.backend, "control_mode", "joint_pos"),
                              "internal_action_dim": getattr(self.backend, "internal_action_dim", None) or model.action_dim}
-                    extra_message = {}
                     if local_eef:
-                        extra_message['effective_model'] = {
-                            **dict(request['model']), 'action_space': 'eef_abs_pose'}
-                    extras = list(getattr(self.backend, "observation_extras", ()) or ())
-                    if extras and not verification_only:
-                        extra_message['observation_extras'] = extras
-                    if extra_message:
-                        ready['message'] = json.dumps(extra_message)
+                        ready['message'] = json.dumps({'effective_model': {
+                            **dict(request['model']), 'action_space': 'eef_abs_pose'}})
+                    recording_features = json.loads(ready.get('message') or '{}')
+                    recording_features['roboeval_evidence_v1'] = True
+                    ready['message'] = json.dumps(recording_features)
                     await ws.send(encode_control(ready))
                     self._progress('model_ready', run_id, model)
                     await self._serve(ws, run_id, model)
@@ -281,6 +278,19 @@ class LocalPolicyRuntime:
                 reason = 'Malformed local observation frame'
                 frame = pb.RelayFrame.FromString(raw)
                 if frame.type == pb.SESSION_CLOSE and frame.session_id == run_id: return
+                if (frame.type == pb.LOCAL_CONTROL and frame.session_id == run_id
+                        and frame.payload == b'roboeval_drain_v1'):
+                    try:
+                        drain = getattr(self.backend, 'drain_recording', None)
+                        evidence = await drain() if drain is not None else None
+                        payload = json.dumps({'recording_drain': evidence}, allow_nan=False).encode()
+                        if len(payload) > 8 * 1024 * 1024:
+                            raise ValueError('Terminal action evidence too large')
+                    except Exception as error:
+                        payload = json.dumps({'recording_drain_error': type(error).__name__}).encode()
+                    await ws.send(pb.RelayFrame(protocol_version=1, type=pb.LOCAL_CONTROL,
+                        session_id=run_id, payload=payload).SerializeToString())
+                    continue
                 stage = 'validate_frame'
                 details.update(received_type=frame.type, received_sequence=frame.sequence,
                                deadline_ms=frame.deadline_ms, session_matches=frame.session_id == run_id)
@@ -310,13 +320,41 @@ class LocalPolicyRuntime:
                                elapsed_s=round(time.monotonic() - started, 2))
                 await self._error(ws, run_id, 'INVALID_REQUEST', reason)
                 return
-            try: actions = np.asarray(await self._infer_with_progress(run_id, model, observation, frame.deadline_ms), dtype=np.float32)
+            try:
+                output = await self._infer_with_progress(run_id, model, observation, frame.deadline_ms)
+                actions = np.asarray(output["actions"] if isinstance(output, Mapping) else output, dtype=np.float32)
             except asyncio.TimeoutError: await self._error(ws, run_id, "INFERENCE_TIMEOUT", "Local inference exceeded its deadline"); return
             except PolicyStopped as exc:
                 await self._error(ws, run_id, "POLICY_STOPPED", f"Agent requested {exc.reason}; operator scoring is required")
                 return
-            except Exception: print(traceback.format_exc(), flush=True); await self._error(ws, run_id, "INFERENCE_FAILED", "Local inference failed"); return
+            except Exception as exc:
+                print(traceback.format_exc(), flush=True)
+                if type(exc).__name__ == 'DreamSessionExpired':
+                    await self._error(ws, run_id, 'INFERENCE_SESSION_EXPIRED',
+                                      'Dream model session expired server-side; recovery retry failed. Restart the trial.')
+                else:
+                    await self._error(ws, run_id, 'INFERENCE_FAILED', 'Local inference failed')
+                return
             internal_dim = getattr(self.backend, "internal_action_dim", None) or model.action_dim
             if actions.ndim != 2 or not 1 <= actions.shape[0] <= model.max_horizon or actions.shape[1] != internal_dim or not np.isfinite(actions).all(): await self._error(ws, run_id, "INVALID_REQUEST", "Backend returned an invalid action array"); return
             plan = pb.ActionPlan(request_sequence=sequence, plan_id=sequence, start_step=observation.control_step, valid_until_step=observation.control_step + len(actions) - 1, control_hz=model.control_hz, actions=pb.Tensor(shape=actions.shape, dtype=pb.FLOAT32, data=actions.tobytes()))
+            if isinstance(output, Mapping) and 'raw_actions' in output:
+                from .action_plan import make_action_plan
+                try:
+                    evidence = make_action_plan(output, model, sequence=sequence, start_step=observation.control_step)
+                    plan.raw_actions.CopyFrom(evidence.raw_actions)
+                    plan.raw_action_space = evidence.raw_action_space
+                    plan.raw_action_source = evidence.raw_action_source
+                except (ValueError, TypeError, KeyError):
+                    # Optional recording evidence cannot invalidate executable actions.
+                    plan.raw_action_source = 'unavailable:invalid_recording_evidence'
+            evidence = getattr(self.backend, 'recording_evidence', None)
+            if evidence is not None:
+                try:
+                    encoded = json.dumps(evidence, allow_nan=False, separators=(',', ':')).encode()
+                    if len(encoded) > 8 * 1024 * 1024:
+                        raise ValueError('Action evidence too large')
+                    plan.action_evidence_json = encoded
+                except (ValueError, TypeError, OverflowError):
+                    plan.raw_action_source = 'unavailable:invalid_recording_evidence'
             await ws.send(pb.RelayFrame(protocol_version=1, type=pb.ACTION_PLAN, session_id=run_id, sequence=sequence, payload=plan.SerializeToString()).SerializeToString()); sequence += 1

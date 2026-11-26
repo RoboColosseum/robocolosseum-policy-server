@@ -124,6 +124,12 @@ message ActionPlan {
   Tensor actions = 6;
   // The policy declares the task complete; actions must be zeros and the Client ends the trial.
   bool done = 7;
+  // Optional recording evidence; never used for robot execution.
+  Tensor raw_actions = 8;
+  string raw_action_space = 9;
+  string raw_action_source = 10;
+  // Optional raw blocks and execution mapping; schema versioned within JSON.
+  bytes action_evidence_json = 11;
 }
 
 message ResetRequest {

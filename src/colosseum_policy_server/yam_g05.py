@@ -180,6 +180,7 @@ class G05YAMRuntime:
                 raise ValueError(f'G05 {key} must be finite with shape (1, 32, {end-start})')
             arrays.append(array[0])
         actions = np.concatenate(arrays, axis=1)
+        raw_actions = actions.copy()
         # Only saturate finite, postprocessed gripper targets. Keep all arm
         # joints unchanged and reject nonfinite/missing values above.
         for column, label in ((6, 'left_gripper'), (13, 'right_gripper')):
@@ -192,4 +193,5 @@ class G05YAMRuntime:
                             label, int(outside.sum()), float(values.min()), float(values.max()),
                             first, float(values[first]), float(np.clip(values[first], 0, 1)))
                 np.clip(values, 0, 1, out=values)
-        return {'actions': actions}
+        return {'actions': actions, 'raw_actions': raw_actions,
+                'raw_action_source': 'model_output_before_action_safety_clipping'}

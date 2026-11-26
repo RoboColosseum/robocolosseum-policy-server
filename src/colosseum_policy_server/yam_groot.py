@@ -74,10 +74,12 @@ class GrootYAMRuntime:
         actions = actions.detach().cpu().numpy()
         if actions.shape != (1, 16, 14) or not np.isfinite(actions).all():
             raise ValueError('GR00T YAM must return a finite 1 x 16 x 14 action tensor')
+        raw_actions = actions[0].copy()
         # Only saturate finite gripper targets (same as G05/LingBot); arm joints are unchanged.
         grippers = actions[:, :, [6, 13]]
         if np.any(grippers < 0) or np.any(grippers > 1):
             log.warning('GR00T clipped grippers to [0, 1]: count=%d raw_min=%.6f raw_max=%.6f',
                         int(((grippers < 0) | (grippers > 1)).sum()), float(grippers.min()), float(grippers.max()))
             actions[:, :, [6, 13]] = np.clip(grippers, 0, 1)
-        return {'actions': actions[0].astype(np.float32)}
+        return {'actions': actions[0].astype(np.float32), 'raw_actions': raw_actions,
+                'raw_action_source': 'model_output_before_action_safety_clipping'}

@@ -364,7 +364,7 @@ class AsyncColosseumPolicySDK:
 
     async def send_action(
         self,
-        actions: np.ndarray,
+        actions: np.ndarray | Mapping,
         *,
         observation: Observation | None = None,
         plan_id: int | None = None,
@@ -395,7 +395,8 @@ class AsyncColosseumPolicySDK:
                     f"observation sequence {source.sequence} exceeded its {source.deadline_ms} ms deadline"
                 )
 
-        chunk = np.asarray(actions)
+        output = actions if isinstance(actions, Mapping) else None
+        chunk = np.asarray(output["actions"] if output is not None else actions)
         if chunk.ndim == 1:
             chunk = chunk[None, :]
         if chunk.ndim != 2 or chunk.shape[0] == 0 or chunk.shape[1] == 0:
@@ -436,6 +437,19 @@ class AsyncColosseumPolicySDK:
             actions=tensor_from_numpy(chunk),
             done=done,
         )
+        if output is not None and 'raw_actions' in output:
+            from types import SimpleNamespace
+            from .action_plan import make_action_plan
+            try:
+                evidence = make_action_plan(output, SimpleNamespace(
+                    max_horizon=self.max_horizon, action_dim=chunk.shape[1],
+                    control_hz=plan.control_hz, action_space=self.selected_action_space or ''),
+                    sequence=source.sequence, start_step=plan.start_step)
+                plan.raw_actions.CopyFrom(evidence.raw_actions)
+                plan.raw_action_space = evidence.raw_action_space
+                plan.raw_action_source = evidence.raw_action_source
+            except (ValueError, TypeError, KeyError, OverflowError):
+                plan.raw_action_source = 'unavailable:invalid_recording_evidence'
         await self._send(
             self._frame(
                 pb.ACTION_PLAN,
