@@ -20,8 +20,9 @@ def config(tmp_path, **overrides):
 
 
 class Backend:
-    def __init__(self):
+    def __init__(self, evidence=None):
         self.sessions, self.ended, self.calls = [], 0, 0
+        self.evidence = evidence
 
     async def start_session(self, model, request):
         self.sessions.append(request)
@@ -34,7 +35,11 @@ class Backend:
         if observation.instruction == "fail":
             raise RuntimeError("model crashed")
         assert observation.sensors[0].sensor_id == "head_image"  # wire message reaches the backend
-        return np.full((32, 14), 0.5, np.float32)
+        actions = np.full((32, 14), 0.5, np.float32)
+        if self.evidence is not None:
+            return {'actions': actions, 'raw_actions': np.full((40, 14), 0.75, np.float64),
+                    'raw_action_source': self.evidence}
+        return actions
 
 
 class Supervisor:
@@ -62,7 +67,8 @@ def yam_observation(instruction, step):
 
 
 @pytest.mark.asyncio
-async def test_serves_a_trial_and_reports_inference_errors(tmp_path):
+@pytest.mark.parametrize('evidence', [None, 'model_output_before_action_safety_clipping', 'invalid'])
+async def test_serves_a_trial_and_reports_inference_errors(tmp_path, evidence):
     seen = {}
     finished = asyncio.Event()
 
@@ -83,7 +89,7 @@ async def test_serves_a_trial_and_reports_inference_errors(tmp_path):
         finished.set()
         await ws.wait_closed()
 
-    backend, supervisor = Backend(), Supervisor()
+    backend, supervisor = Backend(evidence), Supervisor()
     async with serve(router, "127.0.0.1", 0) as server:
         port = server.sockets[0].getsockname()[1]
         runner = RemotePolicyRunner.create(config(tmp_path), "g05-yam", router_url=f"ws://127.0.0.1:{port}",
@@ -102,6 +108,14 @@ async def test_serves_a_trial_and_reports_inference_errors(tmp_path):
     assert (kind, sequence, plan.request_sequence, plan.start_step, plan.valid_until_step, plan.control_hz) == (
         pb.ACTION_PLAN, 1, 1, 0, 31, 30)
     assert tensor_to_numpy(plan.actions).shape == (32, 14)
+    np.testing.assert_array_equal(tensor_to_numpy(plan.actions), np.full((32, 14), 0.5, np.float32))
+    if evidence == 'model_output_before_action_safety_clipping':
+        np.testing.assert_array_equal(tensor_to_numpy(plan.raw_actions), np.full((40, 14), 0.75, np.float64))
+        assert plan.raw_action_space == 'joint_position'
+        assert plan.raw_action_source == evidence
+    else:
+        assert not plan.HasField('raw_actions')
+        assert plan.raw_action_source == ('unavailable:invalid_recording_evidence' if evidence else '')
     assert seen["error"] == (pb.ERROR, 2, "INFERENCE_FAILED")
     assert backend.sessions == [{"robot_type": "yam"}] and backend.calls == 2
     assert supervisor.events == ["activate", "stop"]  # loaded once, before registering

@@ -174,6 +174,8 @@ class DreamLabsBackend:
 
     async def infer(self, model: LocalModel, observation: pb.Observation) -> np.ndarray:
         """Return the targets of the Client's next rows_per_call steps, requesting the next chunk when it is due."""
+        self.recording_evidence = dict(version=1, source='dreamlabs', blocks=[],
+            execution={}, clock='policy_host_monotonic')
         try:
             now = time.monotonic()
             self._advance_plan(now)
@@ -192,6 +194,17 @@ class DreamLabsBackend:
             # cannot be cancelled, but must not start another attempt or return a late plan.
             self._retry_stop.set()
             raise
+
+    async def drain_recording(self):
+        """Retain the last prefetched reply without asking the model for more work."""
+        self.recording_evidence = dict(version=1, source='dreamlabs', blocks=[],
+            execution=dict(kind='unused_terminal', source_block=None), clock='policy_host_monotonic')
+        if self.request is not None:
+            await asyncio.shield(self.request)
+            reply, self.request = self.request.result(), None
+            self.replies += 1
+            self._record_reply(reply, 'unused_terminal')
+        return self.recording_evidence
 
     async def end_session(self) -> None:
         """Wait for the request in flight, print the playback rate and close the session."""
@@ -223,7 +236,8 @@ class DreamLabsBackend:
         for _ in range(self.hold_asks):
             self._ask(time.monotonic())
             await asyncio.wait({self.request})
-            self.request.result()  # this reply is dropped, but a failed call still raises
+            reply = self.request.result()  # Failed inference still raises.
+            self._record_reply(reply, 'warmup_discarded')
             self.request = None
             self.replies += 1
             await asyncio.sleep(max(0.0, self.asked_at + self.hold_period_s - time.monotonic()))
@@ -304,6 +318,11 @@ class DreamLabsBackend:
         below = np.floor(rows).astype(int)
         above = np.minimum(below + 1, len(self.chunk) - 1)
         share = (rows - below)[:, None]
+        evidence = getattr(self, 'recording_evidence', None)
+        if evidence is not None:
+            evidence['execution'] = dict(kind='linear_interpolation_after_gripper_clip',
+                source_block=getattr(self, 'recording_chunk_id', None),
+                lower_rows=below.tolist(), upper_rows=above.tolist(), weights=(rows-below).tolist())
         return self.chunk[below] + share * (self.chunk[above] - self.chunk[below])
 
     def _install_reply(self) -> None:
@@ -313,8 +332,25 @@ class DreamLabsBackend:
         reply, self.request = self.request.result(), None
         self.replies += 1
         chunk = _chunk_from_reply(reply)
+        self._record_reply(reply, 'received')
         takeover_row = (self.plan_s - self.asked_plan_s) * self.plan_hz
         if takeover_row > len(chunk) - 1:
             print(f"dreamlabs: discarding a chunk that landed after all {len(chunk)} of its rows were due", flush=True)
             return
         self.chunk, self.chunk_plan_s, self.takeover_row = chunk, self.asked_plan_s, takeover_row
+        self.recording_chunk_id = str(self.replies)
+
+    def _record_reply(self, reply, disposition):
+        # Metadata errors cannot change planner pacing or control targets.
+        try:
+            evidence = getattr(self, 'recording_evidence', None)
+            if evidence is not None:
+                evidence['blocks'].append(dict(id=str(self.replies), disposition=disposition,
+                    source='dream_reply_before_float32_conversion_clipping_and_interpolation',
+                    values=np.concatenate([np.asarray(reply['q_l_chunk']),
+                        np.asarray(reply['q_r_chunk'])], axis=1).tolist(),
+                    requested_policy_monotonic_s=self.asked_at,
+                    received_policy_monotonic_s=time.monotonic(),
+                    observation_plan_s=self.asked_plan_s))
+        except Exception:
+            self.recording_evidence = None

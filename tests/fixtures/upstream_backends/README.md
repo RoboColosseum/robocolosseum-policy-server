@@ -1,0 +1,1 @@
+Immutable regression fixtures from RoboColosseum/robocolosseum-policy-server commit bd5032d53ded5f9da1ff103c983111c6da111887. Used only to compare control outputs with the unmodified upstream implementation. Same project license applies. Never imported by runtime code.

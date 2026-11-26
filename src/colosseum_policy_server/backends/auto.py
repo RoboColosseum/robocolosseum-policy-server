@@ -36,6 +36,14 @@ class AutoBackend:
         return await self.active.infer(model, observation)
 
     @property
+    def recording_evidence(self):
+        return getattr(self.active, 'recording_evidence', None)
+
+    async def drain_recording(self):
+        drain = getattr(self.active, 'drain_recording', None)
+        return await drain() if drain is not None else None
+
+    @property
     def control_mode(self):
         return getattr(self.active, 'control_mode', 'joint_pos')
 

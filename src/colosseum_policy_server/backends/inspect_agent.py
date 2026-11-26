@@ -266,6 +266,8 @@ class InspectAgentBackend:
                 self._inflight = None
 
     def _infer(self, observation):
+        self.recording_evidence = dict(version=1, source='inspect_agent', blocks=[],
+            execution=dict(kind='hold', source_block=None), clock='policy_host_monotonic')
         if self.control_mode == "eef_delta_pose":
             return self._infer_so101_eef(observation)
         from inspect_robots.embodiment import EmbodimentInfo
@@ -317,6 +319,13 @@ class InspectAgentBackend:
                           **({'eef_state': eef_state} if self.eef_mode else {})},
                           instruction=observation.instruction, extra={"env_step": observation.control_step})
         chunk = self.agent.act(obs)
+        # Snapshot before stop substitution, bounds checks, gripper mapping and truncation.
+        try:
+            self.recording_evidence['blocks'] = [dict(id=str(observation.control_step),
+                values=[np.asarray(action.data).tolist() for action in chunk.actions],
+                source='agent_action_before_validation_and_stop_substitution')]
+        except Exception:
+            self.recording_evidence = None
         if chunk.meta.get("request_stop") or any(action.meta.get("request_stop") for action in chunk.actions):
             meta = next((a.meta for a in chunk.actions if a.meta.get("request_stop")), chunk.meta)
             self.stop_reason = meta.get("stop_reason", "give_up")
@@ -369,6 +378,10 @@ class InspectAgentBackend:
             actions[:, self.gripper_indices] = 1 - actions[:, self.gripper_indices]
         self.last_step = observation.control_step
         self.last_actions = actions[:self.model.max_horizon].astype(np.float32)
+        if self.recording_evidence is not None:
+            self.recording_evidence['execution'] = dict(kind='prefix',
+                source_block=str(observation.control_step), rows=list(range(len(self.last_actions))),
+                gripper_open_value=self.open_value, binary_gripper=self.robot.binary_gripper)
         return self.last_actions.copy()
 
     def _infer_so101_eef(self, observation):

@@ -66,4 +66,23 @@ class YAMVLAAdapter:
             raise ValueError('YAM action chunk exceeds max_horizon')
         check_bounds(actions[:, [6, 13]], 0, 1, ('left_gripper', 'right_gripper'),
                      'YAM action grippers must be in [0, 1]')
+        if 'raw_actions' in raw:
+            try:
+                return self._with_evidence(raw, actions)
+            except (ValueError, TypeError, KeyError, OverflowError):
+                return actions  # Missing evidence fails recording, never valid control.
+        return actions
+
+    @staticmethod
+    def _with_evidence(raw, actions):
+        if 'raw_actions' in raw:
+            original = np.asarray(_json_decode(raw['raw_actions']))
+            if (original.ndim != 2 or original.shape[1] != 14
+                    or not len(actions) <= len(original) <= 4096
+                    or original.dtype not in (np.dtype('float32'), np.dtype('float64'))
+                    or not np.isfinite(original).all()
+                    or raw.get('raw_action_source') != 'model_output_before_action_safety_clipping'):
+                raise ValueError('Invalid raw YAM action chunk/provenance')
+            return dict(actions=actions, raw_actions=original,
+                        raw_action_source=raw['raw_action_source'])
         return actions
