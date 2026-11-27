@@ -399,3 +399,61 @@ Sources: [G05 snapshot](https://huggingface.co/RoboColosseum/G05-MolmoAct2-YAM/t
 [upstream serving](https://github.com/OpenGalaxea/GalaxeaVLA/blob/89f2322b4ad016e192437adc1a2c253b05bab246/scripts/serve_policy.py).
 
 Training metadata source: [published YAM parts layout](https://huggingface.co/RoboColosseum/G05-MolmoAct2-YAM/blob/26c91270ce33325a29990b3ff7ea7a4b47bd4ec1/configs/data/parts_meta/yam.yaml).
+
+## Isaac 0.5 YAM
+
+[`PerceptronAI/Isaac-0.5-YAM`](https://huggingface.co/PerceptronAI/Isaac-0.5-YAM) at
+`dc52f2565cf76a9dd8dff87a386c945b9e81bdfd` is Isaac 0.5, a 36B sparse VLM,
+fine-tuned on bimanual YAM demonstrations from xDoF ABC and MolmoAct2. It is a
+LeRobot `perceptron_isaac` policy: 14-D absolute joint positions in the usual
+YAM order, continuous [0, 1] grippers, **60-step** chunks at 30 Hz. Use
+`adapter: isaac_yam` with HTTP `/act`. Cameras map top/left/right to the
+policy's `top`/`left`/`right` image features.
+
+The worker loads the checkpoint's saved pre/post processors, which do the
+quantile normalization, image resizing and action unnormalization. The
+checkpoint declares 640x360 images with `image_preprocessing: stretch`, so the
+Client's 640x480 frames are stretched to 640x360 by the model's own processor;
+the worker does not crop. Grippers outside [0, 1] are saturated with a warning,
+as for pi05/G05/LingBot. Each request resets the policy, so requests are
+independent.
+
+The worker needs Perceptron's pinned LeRobot fork (Python 3.12, CUDA 12.8,
+Linux x86_64), not the upstream LeRobot used by the other workers:
+
+```bash
+git clone --branch main --recurse-submodules https://github.com/perceptron-ai-inc/isaac.git
+cd isaac/lerobot
+uv venv --python 3.12 && source .venv/bin/activate
+uv pip install -c constraints/perceptron_isaac-cu128.txt \
+  --index https://download.pytorch.org/whl/cu128 --index-strategy unsafe-best-match \
+  '.[perceptron_isaac,training]'
+uv pip install --no-deps -e /path/to/colosseum-policy-server
+hf download PerceptronAI/Isaac-0.5-YAM --revision dc52f2565cf76a9dd8dff87a386c945b9e81bdfd \
+  --local-dir /path/to/Isaac-0.5-YAM
+```
+
+```bash
+colosseum-policy-model isaac --robot-type yam \
+  --checkpoint /path/to/Isaac-0.5-YAM/recorded_policy --device cuda --port 9217
+```
+
+`--checkpoint` is the `recorded_policy` directory. The package is 143 GB of
+fp32 weights. Isaac loads them on first use, so the worker runs one synthetic
+inference before it opens its port; give the launcher a long
+`start_timeout_seconds`. In bfloat16 it needs most of an 80 GB GPU. Perceptron
+reports about 0.95 s per YAM chunk on one H100. `--num-steps` (default 10) sets
+the flow steps, not the chunk length. If the Router registers a `max_horizon`
+below 60, pass `--isaac-return-steps` with that value: the YAM adapter rejects
+longer chunks.
+
+Use [local-runtime-yam-isaac.yaml.example](../configs/local-runtime-yam-isaac.yaml.example)
+as the runtime config, either with its launcher or with a relay to a remote GPU
+host, then check the worker without the robot:
+
+```bash
+.venv/bin/python scripts/check_yam_worker.py --endpoint http://127.0.0.1:9217 --max-horizon 60
+```
+
+Tests use stand-in torch/LeRobot modules and the published `config.json`. They
+do not load the weights or establish performance on a physical rig.

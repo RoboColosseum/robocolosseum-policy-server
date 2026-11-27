@@ -57,7 +57,7 @@ def worker():
 
 
 @pytest.mark.parametrize('adapter,horizon,expected', [('molmoact2_so101', 30, 30), ('pi05_so101', 50, 30),
-                                                      ('groot_so101', 40, 30)])
+                                                      ('groot_so101', 40, 30), ('isaac_so101', 60, 30)])
 async def test_http_roundtrip_routing_and_chunk_truncation(worker, adapter, horizon, expected):
     backend = VLABackend({})
     item = model(adapter, worker(horizon))

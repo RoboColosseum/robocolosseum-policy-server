@@ -1,0 +1,168 @@
+{
+    "type": "perceptron_isaac",
+    "n_obs_steps": 1,
+    "input_features": {
+        "observation.images.side": {
+            "type": "VISUAL",
+            "shape": [
+                3,
+                256,
+                256
+            ]
+        },
+        "observation.images.top": {
+            "type": "VISUAL",
+            "shape": [
+                3,
+                256,
+                256
+            ]
+        },
+        "observation.state": {
+            "type": "STATE",
+            "shape": [
+                6
+            ]
+        }
+    },
+    "output_features": {
+        "action": {
+            "type": "ACTION",
+            "shape": [
+                6
+            ]
+        }
+    },
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "use_amp": false,
+    "use_peft": false,
+    "push_to_hub": false,
+    "repo_id": null,
+    "private": true,
+    "tags": null,
+    "license": null,
+    "pretrained_path": null,
+    "pretrained_revision": null,
+    "chunk_size": 60,
+    "n_action_steps": 60,
+    "action_dim": 6,
+    "max_action_dim": 64,
+    "max_action_horizon": 64,
+    "proprio_dim": 6,
+    "max_state_dim": 128,
+    "inference_backend": "native_mharmony",
+    "num_inference_steps": 10,
+    "num_flow_samples": 1,
+    "flow_seed_base": 20260826,
+    "inference_clip_normalized_proprio": true,
+    "clip_normalized_max": 1.0,
+    "fast_clip_normalized_max": 1.0,
+    "clip_action_pose": false,
+    "num_settle_steps": 0,
+    "settle_gripper": -1.0,
+    "rtc_prefix_length": 0,
+    "image_size": [
+        256,
+        256
+    ],
+    "image_preprocessing": "stretch",
+    "camera_order": [
+        "top",
+        "side"
+    ],
+    "serving_camera_roles": null,
+    "allow_image_key_fallback": false,
+    "normalize_gripper": true,
+    "gripper_binary_to_signed": false,
+    "joint_signs": null,
+    "joint_offsets": null,
+    "training_action_frame_contract_version": 2,
+    "hf_model_path": "hf_model",
+    "artifact_kind": "trained_policy",
+    "apply_offset_norm": false,
+    "config_toml_path": null,
+    "stats_path": null,
+    "per_suite_stats_dir": null,
+    "include_scene_description": false,
+    "vector_max_states": 128,
+    "normalize_task_text": false,
+    "action_conditioning": false,
+    "action_conditioning_role": "user",
+    "mistake_conditioning": false,
+    "render_processor_enabled": false,
+    "render_patch_size": 16,
+    "render_pixel_shuffle_scale": 2,
+    "render_temporal_patch_size": 2,
+    "render_max_num_patches": 784,
+    "render_min_num_patches": 784,
+    "dataset_name": "molmoact2_so100_101",
+    "policy_state_dataset": "molmoact2_so100_101",
+    "robot_type": "so100_so101",
+    "control_mode": "joint",
+    "target_fps": 30.0,
+    "action_feature_names": [
+        "shoulder_pan.pos",
+        "shoulder_lift.pos",
+        "elbow_flex.pos",
+        "wrist_flex.pos",
+        "wrist_roll.pos",
+        "gripper.pos"
+    ],
+    "state_feature_names": [
+        "shoulder_pan.pos",
+        "shoulder_lift.pos",
+        "elbow_flex.pos",
+        "wrist_flex.pos",
+        "wrist_roll.pos",
+        "gripper.pos"
+    ],
+    "strict_hardware_feature_contract": false,
+    "strict_environment_feature_contract": false,
+    "normalization_profile_id": "so100_so101_pooled_v1",
+    "normalization_profile_scope": "molmoact2_so100_101_fps30",
+    "normalization_validation_status": "source_stats_contract_authenticated",
+    "native_render_metadata_path": "native_render_metadata.json",
+    "native_stats_path": "isaac_stats.json",
+    "suite_stats_path": null,
+    "suite_by_task_index_path": null,
+    "fast_processor_path": "fast_processor",
+    "fast_processor_tree_sha256": "127eb029e5acb8242c7bc2c8efcea6c5dd6ffb565353b5c689b8c8ac55f33a8a",
+    "mharmony_version": "0.1.0",
+    "native_require_processor_stream": true,
+    "objective": "mixed",
+    "loss_plan": "text_ntp_fast_flow_action",
+    "train_expert_only": false,
+    "flow_matching_detach_vlm_activations": false,
+    "exclude_non_agent_roles": true,
+    "train_samples_per_chunk": 8,
+    "train_clip_normalized_actions": true,
+    "train_skip_outlier_threshold": 20.0,
+    "train_max_sequence_length": 4096,
+    "flow_rtc_max_delay_steps": 0,
+    "flow_rtc_delay_sampling": "uniform",
+    "flow_dual_timestep_ratio": 0.0,
+    "flow_mask_padded_action_rows": true,
+    "softmax_auxiliary_loss_scale": 0.0001,
+    "moe_load_balancing_loss_coeff": 0.02,
+    "moe_z_loss_coeff": 0.001,
+    "freeze_input_embeddings": true,
+    "train_storage_fp32": true,
+    "normalization_mapping": {
+        "ACTION": "IDENTITY",
+        "STATE": "IDENTITY",
+        "VISUAL": "IDENTITY"
+    },
+    "optimizer_lr": 1e-05,
+    "optimizer_vit_lr": 5e-06,
+    "optimizer_action_expert_lr": 5e-05,
+    "optimizer_betas": [
+        0.9,
+        0.95
+    ],
+    "optimizer_eps": 1e-06,
+    "optimizer_weight_decay": 0.0,
+    "optimizer_grad_clip_norm": 1.0,
+    "optimizer_warmup_steps": 200,
+    "max_train_steps": 30000
+}

@@ -48,6 +48,10 @@ and [runtime configuration](configs/local-runtime-yam-g05.yaml.example).
 For LingBot-VLA v2 YAM, see the [worker setup](docs/lingbot-yam.md) and
 [launcher configuration](configs/local-runtime-yam-lingbot.yaml.example).
 
+For Perceptron Isaac 0.5 (SO-ARM101 and YAM), see [Isaac SO101](docs/so101.md#isaac-05-so100101),
+[Isaac YAM](docs/yam.md#isaac-05-yam) and the
+[YAM runtime configuration](configs/local-runtime-yam-isaac.yaml.example).
+
 To record and review YAM A/B evaluations with all five VLAs on this GPU and
 the three LLMs under Inspect EE control, follow the Client's
 [local evaluation guide](https://github.com/frodobots-org/colosseum-client/blob/main/docs/local-evals.md)
@@ -72,7 +76,8 @@ python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9101 --po
 python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9102 --port 9202 &   # pi0.5
 python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9103 --port 9203 &   # GR00T N1.7
 python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9104 --port 9204 &   # G05
-python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9105 --port 9205     # LingBot
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9105 --port 9205 &   # LingBot
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9107 --port 9207     # Isaac 0.5
 ```
 
 The remote ports follow the host job's model order
@@ -84,7 +89,7 @@ in that order. Then start the runtime:
 uv run colosseum-policy-local --config configs/local-runtime-so101.yaml
 ```
 
-G05 runs at 15 Hz and the other four at 30 Hz; the Client runs one
+G05 runs at 15 Hz and the others at 30 Hz; the Client runs one
 `control_hz` per session. The relay needs only the Python standard library; for
 an ngrok URL instead of a tailnet host, set `COLOSSEUM_TUNNEL_AUTH` (see the
 script's help).

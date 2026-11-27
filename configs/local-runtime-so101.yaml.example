@@ -62,3 +62,18 @@ models:
     launcher: [/path/to/groot-env/bin/python, -m, colosseum_policy_server.model_service,
                groot_n17, --robot-type, so101, --checkpoint, /path/to/groot-so100_101-snapshot,
                --base-model, /path/to/GR00T-N1.7-3B-snapshot, --device, cuda, --port, "9217"]
+  # Perceptron Isaac 0.5: a 36B sparse model, about 72 GB in bfloat16, so it needs an 80 GB GPU of its own.
+  # Its environment is Perceptron's LeRobot fork (docs/so101.md). The first start reads the 143 GB fp32
+  # package before the port opens; raise start_timeout_seconds if the launcher times out.
+  - name: isaac-0.5-so101
+    url: https://huggingface.co/PerceptronAI/Isaac-0.5-SO100_101
+    revision: "296cb4d436c7f4cc914d6edf1a546a2d77cac1c5"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 60
+    endpoint: http://127.0.0.1:9218
+    backend_options: {robot_type: so101, adapter: isaac_so101}
+    launcher: [/path/to/isaac/lerobot/.venv/bin/python, -m, colosseum_policy_server.model_service,
+               isaac, --robot-type, so101, --checkpoint, /path/to/Isaac-0.5-SO100_101/recorded_policy,
+               --device, cuda, --port, "9218"]

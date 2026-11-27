@@ -1,4 +1,4 @@
-"""YAM MolmoAct2/GR00T/pi05/G05 HTTP /act adapter (json_numpy protocol)."""
+"""YAM MolmoAct2/GR00T/pi05/G05/LingBot/Isaac HTTP /act adapter (json_numpy protocol)."""
 import asyncio
 import json
 from collections.abc import Mapping
@@ -20,7 +20,7 @@ class YAMVLAAdapter:
         self.timeout = _positive_float(options.get('http_timeout_seconds', 30), 'http_timeout_seconds')
 
     def validate(self, model):
-        if (model.backend_options.get('adapter') not in {'molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam'}
+        if (model.backend_options.get('adapter') not in {'molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam', 'isaac_yam'}
                 or model.action_space != 'joint_position' or model.action_dim != 14
                 or model.control_hz != 30):
             raise ValueError('YAM VLA requires 14-D joint_position at 30 Hz')
