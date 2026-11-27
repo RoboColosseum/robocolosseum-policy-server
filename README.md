@@ -77,7 +77,7 @@ python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9102 --po
 python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9103 --port 9203 &   # GR00T N1.7
 python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9104 --port 9204 &   # G05
 python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9105 --port 9205 &   # LingBot
-python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9107 --port 9207     # Isaac 0.5
+python3 scripts/policy_server_relay.py --remote http://colosseum-so101:9106 --port 9206     # Isaac 0.5
 ```
 
 The remote ports follow the host job's model order

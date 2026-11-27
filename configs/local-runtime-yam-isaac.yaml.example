@@ -1,7 +1,7 @@
 # Perceptron Isaac 0.5 on bimanual YAM; see docs/yam.md#isaac-05-yam.
 # Use one of two endpoints:
 #   - a relay to a remote GPU host, started before this server:
-#       python3 scripts/policy_server_relay.py --remote http://colosseum-yam:9117 --port 9217
+#       python3 scripts/policy_server_relay.py --remote http://colosseum-yam:9116 --port 9216
 #   - a worker on this machine: uncomment the launcher (needs an 80 GB GPU).
 host: 127.0.0.1
 port: 8000
@@ -24,7 +24,7 @@ models:
     # The checkpoint predicts 60 steps. For a smaller registered max_horizon, also pass
     # --isaac-return-steps N to the worker: the YAM adapter rejects longer chunks.
     max_horizon: 60
-    endpoint: http://127.0.0.1:9217
+    endpoint: http://127.0.0.1:9216
     backend_options:
       robot_type: yam
       adapter: isaac_yam
@@ -40,4 +40,4 @@ models:
     #   - --isaac-return-steps
     #   - "60"
     #   - --port
-    #   - "9217"
+    #   - "9216"

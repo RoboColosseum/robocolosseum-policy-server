@@ -435,7 +435,7 @@ hf download PerceptronAI/Isaac-0.5-YAM --revision dc52f2565cf76a9dd8dff87a386c94
 
 ```bash
 colosseum-policy-model isaac --robot-type yam \
-  --checkpoint /path/to/Isaac-0.5-YAM/recorded_policy --device cuda --port 9217
+  --checkpoint /path/to/Isaac-0.5-YAM/recorded_policy --device cuda --port 9216
 ```
 
 `--checkpoint` is the `recorded_policy` directory. The package is 143 GB of
@@ -452,7 +452,7 @@ as the runtime config, either with its launcher or with a relay to a remote GPU
 host, then check the worker without the robot:
 
 ```bash
-.venv/bin/python scripts/check_yam_worker.py --endpoint http://127.0.0.1:9217 --max-horizon 60
+.venv/bin/python scripts/check_yam_worker.py --endpoint http://127.0.0.1:9216 --max-horizon 60
 ```
 
 Tests use stand-in torch/LeRobot modules and the published `config.json`. They
