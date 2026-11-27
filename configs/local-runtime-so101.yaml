@@ -64,3 +64,16 @@ models:
     max_horizon: 50
     endpoint: http://127.0.0.1:9205   # relay -> colosseum-so101:9105
     backend_options: {robot_type: so101, adapter: lingbot_so101}
+  # 30 Hz: model card -- Isaac 0.5 fine-tuned on the MolmoAct2 SO-100/101 demonstrations (target_fps 30), in the
+  # earlier SO100 joint frame, so the default joint_frame: legacy applies. 60-step absolute chunks. The host worker
+  # puts the wrist image in the policy's "top" slot and the external image in "side". Port 9106 is the slot after
+  # the five models above; change both ports if the host serves Isaac elsewhere.
+  - name: isaac-0.5-so101
+    url: https://huggingface.co/PerceptronAI/Isaac-0.5-SO100_101
+    revision: "296cb4d436c7f4cc914d6edf1a546a2d77cac1c5"
+    action_space: joint_position
+    action_dim: 6
+    control_hz: 30
+    max_horizon: 60
+    endpoint: http://127.0.0.1:9206   # relay -> colosseum-so101:9106
+    backend_options: {robot_type: so101, adapter: isaac_so101}

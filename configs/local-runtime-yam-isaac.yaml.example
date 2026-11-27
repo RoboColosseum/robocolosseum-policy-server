@@ -1,0 +1,43 @@
+# Perceptron Isaac 0.5 on bimanual YAM; see docs/yam.md#isaac-05-yam.
+# Use one of two endpoints:
+#   - a relay to a remote GPU host, started before this server:
+#       python3 scripts/policy_server_relay.py --remote http://colosseum-yam:9116 --port 9216
+#   - a worker on this machine: uncomment the launcher (needs an 80 GB GPU).
+host: 127.0.0.1
+port: 8000
+log_dir: local-policy-logs
+# A launched worker reads the 143 GB fp32 package and warms up before its port opens.
+start_timeout_seconds: 1800
+backend:
+  name: vla
+  options:
+    http_timeout_seconds: 60
+models:
+  - name: isaac-0.5-yam
+    model_type: vla
+    url: https://huggingface.co/PerceptronAI/Isaac-0.5-YAM
+    # Must match the local snapshot AND the Router model registration.
+    revision: dc52f2565cf76a9dd8dff87a386c945b9e81bdfd
+    action_space: joint_position
+    action_dim: 14
+    control_hz: 30
+    # The checkpoint predicts 60 steps. For a smaller registered max_horizon, also pass
+    # --isaac-return-steps N to the worker: the YAM adapter rejects longer chunks.
+    max_horizon: 60
+    endpoint: http://127.0.0.1:9216
+    backend_options:
+      robot_type: yam
+      adapter: isaac_yam
+    # launcher:
+    #   - /usr/bin/env
+    #   - HF_HUB_OFFLINE=1
+    #   - /absolute/path/to/isaac/lerobot/.venv/bin/colosseum-policy-model
+    #   - isaac
+    #   - --robot-type
+    #   - yam
+    #   - --checkpoint
+    #   - /absolute/path/to/Isaac-0.5-YAM/recorded_policy
+    #   - --isaac-return-steps
+    #   - "60"
+    #   - --port
+    #   - "9216"

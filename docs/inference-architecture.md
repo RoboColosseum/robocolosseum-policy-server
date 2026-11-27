@@ -20,8 +20,9 @@ model action dimensions/semantics are checked before reporting ready. An optiona
 legacy Franka default (or an explicitly configured robot).
 
 Built-in VLA adapters: `molmoact2`, `pi05_lerobot`, `groot_n17`, `g05`, `lap_3b`
-support Franka only. `molmoact2_yam` and `groot_yam` support [YAM](yam.md);
-`molmoact2_so101`, `pi05_so101` and `g05_so101` support [SO101](so101.md). Their existing payloads, transports, and action
+support Franka only. `molmoact2_yam`, `groot_yam`, `pi05_yam`, `g05_yam`, `lingbot_yam`
+and `isaac_yam` support [YAM](yam.md); `molmoact2_so101`, `pi05_so101`, `groot_so101`,
+`g05_so101`, `lingbot_so101` and `isaac_so101` support [SO101](so101.md). Their existing payloads, transports, and action
 conversions remain unchanged. Inspect currently supports the Franka joint-position
 contract only. Unsupported combinations fail preparation rather than borrowing
 Franka semantics. A synthetic YAM plugin test verifies extensibility, not hardware support.

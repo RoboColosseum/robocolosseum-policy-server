@@ -19,7 +19,7 @@ def model(endpoint='http://127.0.0.1:9100'):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('adapter', ['molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam'])
+@pytest.mark.parametrize('adapter', ['molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam', 'isaac_yam'])
 async def test_gripper_bounds_logged_before_network(adapter, caplog):
     item = replace(model(), backend_options={'adapter': adapter, 'robot_type': 'yam'})
     obs = observation()
@@ -31,7 +31,7 @@ async def test_gripper_bounds_logged_before_network(adapter, caplog):
     assert str(exc.value) in caplog.text
 
 
-@pytest.mark.parametrize('adapter', ['molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam'])
+@pytest.mark.parametrize('adapter', ['molmoact2_yam', 'groot_yam', 'pi05_yam', 'g05_yam', 'lingbot_yam', 'isaac_yam'])
 def test_action_gripper_bounds_logged_with_chunk_index(adapter, caplog, monkeypatch):
     import io
     import json
@@ -57,7 +57,7 @@ def observation():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("adapter,horizon", [("molmoact2_yam", 30), ("groot_yam", 16), ("pi05_yam", 30), ("g05_yam", 32), ("lingbot_yam", 30)])
+@pytest.mark.parametrize("adapter,horizon", [("molmoact2_yam", 30), ("groot_yam", 16), ("pi05_yam", 30), ("g05_yam", 32), ("lingbot_yam", 30), ("isaac_yam", 60)])
 async def test_http_roundtrip_and_vla_routing(tmp_path, adapter, horizon):
     class Runtime:
         action_dim = 14
